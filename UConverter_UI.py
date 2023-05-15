@@ -86,7 +86,7 @@ class UC_UI(Tk):
 
         lab_unit1 = Label(self, text = "From:", anchor = W, bd = 2, width = 10, **self.font_text)
         lab_unit1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        lab_val1 = Label(self, text = "{}".format(self.val1_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        lab_val1 = Label(self, text = "{:.1e}".format(self.val1_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
         lab_val1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
         self.Cb_opt2 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 18)
         self.Cb_opt2.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[0])
@@ -94,11 +94,11 @@ class UC_UI(Tk):
         self.Cb_opt2.bind("<<ComboboxSelected>>", self.unit_converter)
         self.ent_unit1 = Entry(self, textvariable = self.val1, justify = LEFT, bd = 5, relief = SUNKEN, width = 18, **self.font_entry)
         self.ent_unit1.grid(row = 4, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
-        self.ent_unit1.bind("<MouseWheel>", lambda event: self.ent_path.xview_scroll(int(event.delta/40), 'units'))
+        self.ent_unit1.bind("<MouseWheel>", lambda event: self.ent_unit1.xview_scroll(int(event.delta/40), 'units'))
 
         lab_unit2 = Label(self, text = "To:", anchor = W, bd = 2, width = 10, **self.font_text)
         lab_unit2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        lab_val2 = Label(self, text = "{}".format(self.val2_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        lab_val2 = Label(self, text = "{:.1e}".format(self.val2_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
         lab_val2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
         self.Cb_opt3 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 18)
         self.Cb_opt3.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[1])
@@ -106,7 +106,24 @@ class UC_UI(Tk):
         self.Cb_opt3.bind("<<ComboboxSelected>>", self.unit_converter)
         self.ent_unit2 = Entry(self, textvariable = self.val2, justify = LEFT, bd = 5, relief = SUNKEN,  width = 18, **self.font_entry)
         self.ent_unit2.grid(row = 7, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
-        self.ent_unit2.bind("<MouseWheel>", lambda event: self.ent_path.xview_scroll(int(event.delta/40), 'units'))
+        self.ent_unit2.bind("<MouseWheel>", lambda event: self.ent_unit2.xview_scroll(int(event.delta/40), 'units'))
+
+# UI manual
+        text_man1 = 'List of magnitudes added to the application.'
+        text_man2 = 'Press Enter to run the conversion.'
+        text_man3 = 'Addition of a decimal order of magnitude.'
+        text_man4 = 'Actual total value in scientific notation.'
+        fr_man = Toplevel(self, bd= 2, bg = 'darkblue')
+        fr_man.resizable(False, False)
+        fr_man.overrideredirect(True)
+        fr_man.wm_attributes('-alpha', 0.8)
+        fr_man.withdraw()
+        self.fr_lab = Label(fr_man, justify = LEFT, bd = 2, **self.font_man)
+        self.fr_lab.grid(padx = 1, pady = 1, sticky = W)
+        self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [203, 33, 290, 30], text_man1))
+        self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [209, 39, 235, 30], text_man2))
+        lab_val1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
+        lab_val2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
 
 # UI contextual menu
         self.menucontext = Menu(self, tearoff = 0)
@@ -124,7 +141,7 @@ class UC_UI(Tk):
 
 
 # Additional functions of the class
-    '''Magnitude selection'''
+    ''' Magnitude selection '''
     def mag_selection(self, event):
         self.Cb_opt2.config(values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()))
         self.Cb_opt2.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[0])
@@ -134,16 +151,30 @@ class UC_UI(Tk):
         self.unit_converter()
 
 
+    ''' Unit convertor main function '''
     def unit_converter(self, event = 0):
-        self.val2.set(self.val1.get()*self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]/self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()])
+        try:
+            self.val2.set(self.val1.get()*self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]/self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()])
+        except:
+            pass
 
 
-    ''' Show contextual menu'''
+    ''' Show manual widget '''
+    def show_manual(self, e, fr, pos, text_man):
+        if 0 < e.x < pos[0] and 0 < e.y < pos[1]:
+            fr.deiconify()
+            self.fr_lab.config(text = text_man)
+            fr.geometry('{}x{}+{}+{}'.format(pos[2], pos[3], e.x_root + 20, e.y_root + 20))
+        else:
+            fr.withdraw()
+
+
+    ''' Show contextual menu '''
     def show_menucontext(self, e):
         self.menucontext.post(e.x_root, e.y_root)
 
 
-    '''Exit function'''
+    ''' Exit function '''
     def exit(self):
         print('Exiting FF Explorer...')
         self.quit()
