@@ -59,7 +59,12 @@ class UC_UI(Tk):
 
 # UI variables
         self.dict_mag = {'*Select magnitude*' : -1, 'Mass' : 0, 'Length' : 1, 'Area' : 2, 'Volume' : 3, 'Time' : 4, 'Energy' : 5, 'Pressure' : 6, 'Data' : 7}
-        self.dict_oders = {'' : 1.0, 'k' : 1E3, 'M' : 1E6, 'G' : 1E9, 'T' : 1E12}
+        self.dict_order1 = {'q' : -30, 'r' : -27, 'y' : -24, 'z' : -21, 'a' : -18, 'f' : -15, 'p' : -12,
+                            'n' : -9, '\u03bc' : -6, 'm' : -3, '1' : 1, 'k' : 3, 'M' : 6, 'G' : 9, 'T' : 12,
+                            'P' : 15, 'E' : 18, 'Z' : 21, 'Y' : 24, 'R' : 27, 'Q' : 30}
+        self.dict_order2 = {'1' : 0, 'k' : 1, 'M' : 2, 'G' : 3, 'T' : 4, 'P' : 5, 'E' : 6, 'Z' : 7, 'Y' : 8, 'R' : 9, 'Q' : 10}
+        self.list_order1 = list(self.dict_order1.values())
+        self.list_order2 = list(self.dict_order1.keys())
         dict_mass = {'gram (g)' : 1.0, 'Av. pound (lb)' : 453.6, 'Av. ounce (oz)' : 28.35}
         dict_length = {'meter (m)' : 1.0, 'inch (in)' : 0.0254, 'yard (yd)' : 0.9144, 'mile (mi)' : 1609.34}
         dict_area = {'square meter (m\u00B2)' : 1.0, 'square inch (in\u00B2)' : 0.00064516, 'square yard (yd\u00B2)' : 0.836127, 'square mile (mi\u00B2)' : 2.59E6}
@@ -88,9 +93,12 @@ class UC_UI(Tk):
         lab_unit1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
         lab_val1 = Label(self, text = "{:.1e}".format(self.val1_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
         lab_val1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
-        self.Cb_opt2 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 18)
+        Lb_order1 = Label(self, text = "1", relief = RIDGE, width = 2)
+        Lb_order1.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
+        Lb_order1.bind("<MouseWheel>", lambda event: self.change_units(event, Lb_order1))
+        self.Cb_opt2 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 14)
         self.Cb_opt2.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[0])
-        self.Cb_opt2.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
+        self.Cb_opt2.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
         self.Cb_opt2.bind("<<ComboboxSelected>>", self.unit_converter)
         self.ent_unit1 = Entry(self, textvariable = self.val1, justify = LEFT, bd = 5, relief = SUNKEN, width = 18, **self.font_entry)
         self.ent_unit1.grid(row = 4, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
@@ -100,9 +108,12 @@ class UC_UI(Tk):
         lab_unit2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
         lab_val2 = Label(self, text = "{:.1e}".format(self.val2_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
         lab_val2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
-        self.Cb_opt3 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 18)
+        Lb_order2 = Label(self, text = "1", relief = RIDGE, width = 2)
+        Lb_order2.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
+        Lb_order2.bind("<MouseWheel>", lambda event: self.change_units(event, Lb_order2))
+        self.Cb_opt3 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 14)
         self.Cb_opt3.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[1])
-        self.Cb_opt3.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
+        self.Cb_opt3.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
         self.Cb_opt3.bind("<<ComboboxSelected>>", self.unit_converter)
         self.ent_unit2 = Entry(self, textvariable = self.val2, justify = LEFT, bd = 5, relief = SUNKEN,  width = 18, **self.font_entry)
         self.ent_unit2.grid(row = 7, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
@@ -148,11 +159,27 @@ class UC_UI(Tk):
         self.Cb_opt3.config(values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()))
         self.Cb_opt3.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[1])
 
+        if self.Cb_opt1.get() == 'Data':
+            self.list_order1 = list(self.dict_order2.values())
+            self.list_order2 = list(self.dict_order2.keys())
+        else:
+            self.list_order1 = list(self.dict_order1.values())
+            self.list_order2 = list(self.dict_order1.keys())
+
         self.unit_converter()
 
 
+    def change_units(self, e = 0, lab = 0):
+        order_source = self.dict_order2 if self.Cb_opt1.get() == 'Data' else self.dict_order1
+        try:
+            idn = int(self.list_order1.index(order_source[lab["text"]]) + e.delta/120)
+        except:
+            idn = 0
+        if 0 <= idn < len(self.list_order1):
+            lab.config(text = self.list_order2[idn])
+
     ''' Unit convertor main function '''
-    def unit_converter(self, event = 0):
+    def unit_converter(self, e = 0):
         try:
             self.val2.set(self.val1.get()*self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]/self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()])
         except:
