@@ -2,3 +2,10 @@
 Training software, unit converter of several magnitudes of interest written in **Python 3.10** as a desktop application.
 
 In *UI appearance.PNG*, you can find a preview of the UI.
+
+For the conversion, a list of conversions from each magnitude is provided.
+This list contains the values or expressions needed to transform any
+secondary unit to the main one, which is the first of the list. The program
+converts the changed value to that main unit, and then performs a second
+conversion to the selected units for the final value. The order of magnitude
+is applied within this process.
