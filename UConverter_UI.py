@@ -11,7 +11,6 @@ Juan García Sánchez, 2023
 
 from tkinter import *
 from tkinter import ttk, font, messagebox, filedialog, PhotoImage
-from PIL import ImageTk, Image
 import os
 import gc
 
@@ -60,7 +59,7 @@ class UC_UI(Tk):
 # UI variables
         self.dict_mag = {'*Select magnitude*' : -1, 'Mass' : 0, 'Length' : 1, 'Area' : 2, 'Volume' : 3, 'Time' : 4, 'Energy' : 5, 'Pressure' : 6, 'Data' : 7}
         self.dict_order1 = {'q' : -30, 'r' : -27, 'y' : -24, 'z' : -21, 'a' : -18, 'f' : -15, 'p' : -12,
-                            'n' : -9, '\u03bc' : -6, 'm' : -3, '1' : 1, 'k' : 3, 'M' : 6, 'G' : 9, 'T' : 12,
+                            'n' : -9, '\u03bc' : -6, 'm' : -3, '1' : 0, 'k' : 3, 'M' : 6, 'G' : 9, 'T' : 12,
                             'P' : 15, 'E' : 18, 'Z' : 21, 'Y' : 24, 'R' : 27, 'Q' : 30}
         self.dict_order2 = {'1' : 0, 'k' : 1, 'M' : 2, 'G' : 3, 'T' : 4, 'P' : 5, 'E' : 6, 'Z' : 7, 'Y' : 8, 'R' : 9, 'Q' : 10}
         self.list_order1 = list(self.dict_order1.values())
@@ -77,8 +76,8 @@ class UC_UI(Tk):
                            dict_energy, dict_pressure, dict_data, {'' : 0, ' ' : 1}]   # List of dictionaries with set of units, each one corresponds to a given magnitude
         self.val1 = DoubleVar(value = 0)
         self.val2 = DoubleVar(value = 0)
-        self.val1_mod = DoubleVar(value = 0)
-        self.val2_mod = DoubleVar(value = 0)
+        self.val1_old = DoubleVar(value = 0)
+        self.val2_old = DoubleVar(value = 0)
 
 # UI layout
         '''Source path selection, from which all nested files or folders will be listed'''
@@ -91,30 +90,30 @@ class UC_UI(Tk):
 
         lab_unit1 = Label(self, text = "From:", anchor = W, bd = 2, width = 10, **self.font_text)
         lab_unit1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        lab_val1 = Label(self, text = "{:.1e}".format(self.val1_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
-        lab_val1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
-        Lb_order1 = Label(self, text = "1", relief = RIDGE, width = 2)
-        Lb_order1.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
-        Lb_order1.bind("<MouseWheel>", lambda event: self.change_units(event, Lb_order1))
+        self.lab_val1 = Label(self, text = "{:.1e}".format(self.val1.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        self.lab_val1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
+        self.Lb_order1 = Label(self, text = "1", relief = RIDGE, width = 2)
+        self.Lb_order1.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
+        self.Lb_order1.bind("<MouseWheel>", lambda event: self.change_units(event, self.Lb_order1))
         self.Cb_opt2 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 14)
         self.Cb_opt2.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[0])
         self.Cb_opt2.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
-        self.Cb_opt2.bind("<<ComboboxSelected>>", self.unit_converter)
+        self.Cb_opt2.bind("<<ComboboxSelected>>", lambda event: self.unit_converter(1))
         self.ent_unit1 = Entry(self, textvariable = self.val1, justify = LEFT, bd = 5, relief = SUNKEN, width = 18, **self.font_entry)
         self.ent_unit1.grid(row = 4, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
         self.ent_unit1.bind("<MouseWheel>", lambda event: self.ent_unit1.xview_scroll(int(event.delta/40), 'units'))
 
         lab_unit2 = Label(self, text = "To:", anchor = W, bd = 2, width = 10, **self.font_text)
         lab_unit2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        lab_val2 = Label(self, text = "{:.1e}".format(self.val2_mod.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
-        lab_val2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
-        Lb_order2 = Label(self, text = "1", relief = RIDGE, width = 2)
-        Lb_order2.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
-        Lb_order2.bind("<MouseWheel>", lambda event: self.change_units(event, Lb_order2))
+        self.lab_val2 = Label(self, text = "{:.1e}".format(self.val2.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        self.lab_val2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
+        self.Lb_order2 = Label(self, text = "1", relief = RIDGE, width = 2)
+        self.Lb_order2.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
+        self.Lb_order2.bind("<MouseWheel>", lambda event: self.change_units(event, self.Lb_order2))
         self.Cb_opt3 = ttk.Combobox(self, values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), background = "#e6e6e6", state = "readonly", width = 14)
         self.Cb_opt3.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[1])
         self.Cb_opt3.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
-        self.Cb_opt3.bind("<<ComboboxSelected>>", self.unit_converter)
+        self.Cb_opt3.bind("<<ComboboxSelected>>", lambda event: self.unit_converter(1))
         self.ent_unit2 = Entry(self, textvariable = self.val2, justify = LEFT, bd = 5, relief = SUNKEN,  width = 18, **self.font_entry)
         self.ent_unit2.grid(row = 7, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
         self.ent_unit2.bind("<MouseWheel>", lambda event: self.ent_unit2.xview_scroll(int(event.delta/40), 'units'))
@@ -122,7 +121,7 @@ class UC_UI(Tk):
 # UI manual
         text_man1 = 'List of magnitudes added to the application.'
         text_man2 = 'Press Enter to run the conversion.'
-        text_man3 = 'Addition of a decimal order of magnitude.'
+        text_man3 = 'Scroll to change order of magnitude.'
         text_man4 = 'Actual total value in scientific notation.'
         fr_man = Toplevel(self, bd= 2, bg = 'darkblue')
         fr_man.resizable(False, False)
@@ -131,10 +130,13 @@ class UC_UI(Tk):
         fr_man.withdraw()
         self.fr_lab = Label(fr_man, justify = LEFT, bd = 2, **self.font_man)
         self.fr_lab.grid(padx = 1, pady = 1, sticky = W)
-        self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [203, 33, 290, 30], text_man1))
-        self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [209, 39, 235, 30], text_man2))
-        lab_val1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
-        lab_val2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
+        self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [203, 32, 290, 30], text_man1))
+        self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [209, 38, 235, 30], text_man2))
+        self.ent_unit2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [209, 38, 235, 30], text_man2))
+        self.Lb_order1.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [30, 30, 248, 30], text_man3))
+        self.Lb_order2.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [30, 30, 248, 30], text_man3))
+        self.lab_val1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
+        self.lab_val2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 30, 255, 30], text_man4))
 
 # UI contextual menu
         self.menucontext = Menu(self, tearoff = 0)
@@ -169,7 +171,7 @@ class UC_UI(Tk):
         self.unit_converter()
 
 
-    def change_units(self, e = 0, lab = 0):
+    def change_units(self, e, lab):
         order_source = self.dict_order2 if self.Cb_opt1.get() == 'Data' else self.dict_order1
         try:
             idn = int(self.list_order1.index(order_source[lab["text"]]) + e.delta/120)
@@ -178,12 +180,49 @@ class UC_UI(Tk):
         if 0 <= idn < len(self.list_order1):
             lab.config(text = self.list_order2[idn])
 
+        self.unit_converter(1)
+
+
     ''' Unit convertor main function '''
     def unit_converter(self, e = 0):
-        try:
-            self.val2.set(self.val1.get()*self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]/self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()])
-        except:
-            pass
+        if self.Cb_opt1.get() == 'Data':
+            order_source = self.dict_order2
+            base = 1024
+        else:
+            order_source = self.dict_order1
+            base = 10
+        if self.val1.get() != self.val1_old.get() or e == 1:
+            order1 = base**order_source[self.Lb_order1["text"]]
+            order2 = base**order_source[self.Lb_order2["text"]]
+            conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+            conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+            self.lab_val1.config(text = "{:.1e}".format(self.val1.get()*order1))
+            self.val1_old.set(self.val1.get())
+            try:
+                if self.val1.get() >= 0:
+                    self.val2.set((self.val1.get()*order1*conversion1)/(order2*conversion2))
+                else:
+                    self.val2.set(None)
+                self.val2_old.set(self.val2.get())
+                self.lab_val2.config(text = "{:.1e}".format(self.val2.get()))
+            except:
+                pass
+        elif self.val2.get() != self.val2_old.get():
+            order1 = base**order_source[self.Lb_order1["text"]]
+            order2 = base**order_source[self.Lb_order2["text"]]
+            conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+            conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+            self.lab_val2.config(text = "{:.1e}".format(self.val2.get()*order2))
+            self.val2_old.set(self.val2.get())
+            try:
+                if self.val2.get() >= 0:
+                    self.val1.set((self.val2.get()*order2*conversion2)/(order1*conversion1))
+                else:
+                    self.val1.set(None)
+                self.val1_old.set(self.val1.get())
+                self.lab_val1.config(text = "{:.1e}".format(self.val1.get()))
+            except:
+                pass
 
 
     ''' Show manual widget '''
