@@ -11,6 +11,7 @@ Juan García Sánchez, 2023
 
 from tkinter import *
 from tkinter import ttk, font, messagebox, filedialog, PhotoImage
+import numpy as np
 import os
 import gc
 
@@ -145,6 +146,12 @@ class UC_UI(Tk):
         self.menucontext.add_command(label = "Exit", command = self.exit)
 
 # UI bindings
+        self.ent_unit1.bind("<KeyRelease>", lambda event: self.unit_converter(1))
+        self.ent_unit2.bind("<KeyRelease>", lambda event: self.unit_converter(0))
+        self.ent_unit1.bind("<Up>", lambda event: self.change_values(1))
+        self.ent_unit1.bind("<Down>", lambda event: self.change_values(-1))
+        self.ent_unit2.bind("<Up>", lambda event: self.change_values(1))
+        self.ent_unit2.bind("<Down>", lambda event: self.change_values(-1))
         self.bind("<3>", self.show_menucontext)
         self.bind("<Return>", lambda event: self.unit_converter())
         self.bind("<Control_R>", lambda event: self.exit())
@@ -168,9 +175,10 @@ class UC_UI(Tk):
             self.list_order1 = list(self.dict_order1.values())
             self.list_order2 = list(self.dict_order1.keys())
 
-        self.unit_converter()
+        self.unit_converter(1)
 
 
+    ''' Change order of magnitude '''
     def change_units(self, e, lab):
         order_source = self.dict_order2 if self.Cb_opt1.get() == 'Data' else self.dict_order1
         try:
@@ -183,7 +191,14 @@ class UC_UI(Tk):
         self.unit_converter(1)
 
 
-    ''' Unit convertor main function '''
+    def change_values(self, e):
+        decimals = len(str(self.val1.get()).split('.')[-1])
+        self.val1.set(np.round(self.val1.get() + e*10**(-decimals), decimals))
+
+        self.unit_converter(1)
+
+
+    ''' Unit converter main function '''
     def unit_converter(self, e = 0):
         if self.Cb_opt1.get() == 'Data':
             order_source = self.dict_order2
@@ -191,38 +206,35 @@ class UC_UI(Tk):
         else:
             order_source = self.dict_order1
             base = 10
-        if self.val1.get() != self.val1_old.get() or e == 1:
-            order1 = base**order_source[self.Lb_order1["text"]]
-            order2 = base**order_source[self.Lb_order2["text"]]
-            conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-            conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
-            self.lab_val1.config(text = "{:.1e}".format(self.val1.get()*order1))
-            self.val1_old.set(self.val1.get())
-            try:
+        try:
+            if self.val1.get() != self.val1_old.get() or e == 1:
+                self.val1_old.set(self.val1.get())
                 if self.val1.get() >= 0:
+                    order1 = base**order_source[self.Lb_order1["text"]]
+                    order2 = base**order_source[self.Lb_order2["text"]]
+                    conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+                    conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+                    self.lab_val1.config(text = "{:.1e}".format(self.val1.get()*order1))
                     self.val2.set((self.val1.get()*order1*conversion1)/(order2*conversion2))
                 else:
                     self.val2.set(None)
                 self.val2_old.set(self.val2.get())
                 self.lab_val2.config(text = "{:.1e}".format(self.val2.get()))
-            except:
-                pass
-        elif self.val2.get() != self.val2_old.get():
-            order1 = base**order_source[self.Lb_order1["text"]]
-            order2 = base**order_source[self.Lb_order2["text"]]
-            conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-            conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
-            self.lab_val2.config(text = "{:.1e}".format(self.val2.get()*order2))
-            self.val2_old.set(self.val2.get())
-            try:
+            elif self.val2.get() != self.val2_old.get():
+                self.val2_old.set(self.val2.get())
                 if self.val2.get() >= 0:
+                    order1 = base**order_source[self.Lb_order1["text"]]
+                    order2 = base**order_source[self.Lb_order2["text"]]
+                    conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+                    conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+                    self.lab_val2.config(text = "{:.1e}".format(self.val2.get()*order2))
                     self.val1.set((self.val2.get()*order2*conversion2)/(order1*conversion1))
                 else:
                     self.val1.set(None)
                 self.val1_old.set(self.val1.get())
                 self.lab_val1.config(text = "{:.1e}".format(self.val1.get()))
-            except:
-                pass
+        except:
+            pass
 
 
     ''' Show manual widget '''
