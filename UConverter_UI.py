@@ -29,6 +29,27 @@ __license__ = 'GPLv3'
 
 
 
+# ================= Magnitude class =============
+
+'''
+Customized class to associate a magnitude' data to a single variable.
+This class contains to main attributes:
+    name, string that assigns the name of the magnitude
+    values, dictionary that associates the transformation values
+        or expressions between an initial unit and the rest; the
+        keys are the name of the units, the values are the
+        transformation values or expressions
+'''
+class Magnitude(dict):
+    def _get_name(self):
+        return self.__name
+    def _set_name(self, value):
+        if not isinstance(value, str):
+            raise TypeError("name must be set to a string")
+        self.__name = value
+    name = property(_get_name, _set_name)
+
+
 # ================= UI class ====================
 
 class UC_UI(Tk):
@@ -59,25 +80,39 @@ class UC_UI(Tk):
 
 # UI variables
         ''' Dictionary of the magnitudes in the program '''
-        self.dict_mag = {'*Select magnitude*' : -1, 'Mass' : 0, 'Length' : 1, 'Area' : 2, 'Volume' : 3, 'Time' : 4, 'Energy' : 5, 'Pressure' : 6, 'Data' : 7}
+        self.magnitudes_names = {'*Select magnitude*' : -1}
         ''' Dictionary of the orders of magnitude available, in decimal '''
         self.dict_order1 = {'q' : -30, 'r' : -27, 'y' : -24, 'z' : -21, 'a' : -18, 'f' : -15, 'p' : -12,
                             'n' : -9, '\u03bc' : -6, 'm' : -3, '1' : 0, 'k' : 3, 'M' : 6, 'G' : 9, 'T' : 12,
                             'P' : 15, 'E' : 18, 'Z' : 21, 'Y' : 24, 'R' : 27, 'Q' : 30}
         ''' Dictionary of the magnitudes in the program, for data magnitude '''
         self.dict_order2 = {'1' : 0, 'k' : 1, 'M' : 2, 'G' : 3, 'T' : 4, 'P' : 5, 'E' : 6, 'Z' : 7, 'Y' : 8, 'R' : 9, 'Q' : 10}
-        ''' List of keys '''
-        dict_mass = {'gram (g)' : 1.0, 'Av. pound (lb)' : 453.6, 'Av. ounce (oz)' : 28.35}
-        dict_length = {'meter (m)' : 1.0, 'inch (in)' : 0.0254, 'yard (yd)' : 0.9144, 'mile (mi)' : 1609.34}
-        dict_area = {'square meter (m\u00B2)' : 1.0, 'square inch (in\u00B2)' : 0.00064516, 'square yard (yd\u00B2)' : 0.836127, 'square mile (mi\u00B2)' : 2.59E6}
-        dict_volume = {'cubic meter (m\u00B3)' : 1.0, 'litre (l)' : 0.001, 'Imp. pint (pt)' : 0.000568261, 'US pint (pt)' : 0.000473176}
-        dict_time = {'second (s)' : 1.0, 'minute (min)' : 60, 'hour (hr)' : 3600, 'day (d)' : 86400}
-        dict_energy = {'jule (J)' : 1.0, 'calorie (cal)' : 4.184, 'electronvolt (Ev)' : 1.6022E-19, 'watt-hour (Wh)' : 3600}
-        dict_pressure = {'Pascal (Pa)' : 1.0, 'bar (b)' : 100000, 'atmosphere (atm)' : 101325, 'mm Hg' : 133.322, 'Torr ()': 133.322}
-        dict_data = {'bit (b)' : 1.0, 'byte (B)' : 8.0}
-        ''' List of dictionaries with set of units, each one corresponds to a given magnitude '''
-        self.dict_units = [dict_mass, dict_length, dict_area, dict_volume, dict_time, 
-                           dict_energy, dict_pressure, dict_data, {'' : 0, ' ' : 1}]
+
+        ''' List of magnitudes with their units and conversions associated, from database file "Magnitudes.txt".
+         Instruction must be followed for a correct management and update of this file: for each magnitude,
+            First line, magnitude's name
+            Second line, names of the units, comma separated
+            Third line, conversion factors associated to previous units, in the same order
+         Magnitudes can be rearranged in any order inside the file, but always following this structure.
+         Avoid empty end line.'''
+        with open(__rootf__ + "/Magnitudes.txt", 'r') as fl:
+            body = fl.read().splitlines()
+            if len(body)%3 != 0:
+                print('Bad magnitude database structure, leaving UConverter...')
+                self.exit()
+            self.magnitudes = []
+            for i in range(len(body)//3):
+                self.magnitudes.append(Magnitude())
+                self.magnitudes[-1].name = body[i*3]
+                self.magnitudes_names[body[i*3]] = i
+                for var1, var2 in np.array([list(body[i*3 + 1].split(',')), list(body[i*3 + 2].split(','))]).transpose():
+                    if '2' in var1:
+                        var1 = var1.replace('2', '\u00B2')
+                    if '3' in var1:
+                        var1 = var1.replace('3', '\u00B3')
+                    self.magnitudes[-1][str(var1)] = float(var2)
+        self.magnitudes.append({'' : 0, ' ' : 1})
+
         ''' Values and control derivatives '''
         self.val1 = DoubleVar(value = 0)
         self.val2 = DoubleVar(value = 0)
@@ -88,8 +123,8 @@ class UC_UI(Tk):
         '''Magnitude selection, among the ones that have been added to the application'''
         lab_mag = Label(self, text = "Magnitude", justify = CENTER, bd = 2, width = 18, **self.font_title)
         lab_mag.grid(row = 0, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5)
-        self.Cb_opt1 = ttk.Combobox(self, values = list(self.dict_mag.keys()), background = "#e6e6e6", state = "readonly", width = 18)
-        self.Cb_opt1.set(list(self.dict_mag.keys())[0])
+        self.Cb_opt1 = ttk.Combobox(self, values = list(self.magnitudes_names.keys()), background = "#e6e6e6", state = "readonly", width = 18)
+        self.Cb_opt1.set(list(self.magnitudes_names.keys())[0])
         self.Cb_opt1.grid(row = 1, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5)
         self.Cb_opt1.bind("<<ComboboxSelected>>", self.mag_selection)
 
@@ -194,11 +229,11 @@ class UC_UI(Tk):
             self.val2_old.set(0.0)
             self.lab_val2.config(text = "{:.1e}".format(self.val2.get()))
         else:
-            self.Cb_opt2.config(values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), state = "readonly")
-            self.Cb_opt2.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[0])
+            self.Cb_opt2.config(values = list(self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]].keys()), state = "readonly")
+            self.Cb_opt2.set(list(self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]].keys())[0])
             self.ent_unit1.config(state = NORMAL)
-            self.Cb_opt3.config(values = list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys()), state = "readonly")
-            self.Cb_opt3.set(list(self.dict_units[self.dict_mag[self.Cb_opt1.get()]].keys())[1])
+            self.Cb_opt3.config(values = list(self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]].keys()), state = "readonly")
+            self.Cb_opt3.set(list(self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]].keys())[1])
             self.ent_unit2.config(state = NORMAL)
 
             if self.Cb_opt1.get() == 'Data':
@@ -292,8 +327,8 @@ class UC_UI(Tk):
                 self.val1_old.set(self.val1.get())
                 order1 = base**order_source[self.Lb_order1["text"]]
                 order2 = base**order_source[self.Lb_order2["text"]]
-                conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-                conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+                conversion1 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+                conversion2 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt3.get()]
                 self.lab_val1.config(text = "{:.1e}".format(self.val1.get()*order1))
                 self.val2.set((self.val1.get()*order1*conversion1)/(order2*conversion2))
                 self.val2_old.set(self.val2.get())
@@ -304,8 +339,8 @@ class UC_UI(Tk):
                 self.val2_old.set(self.val2.get())
                 order1 = base**order_source[self.Lb_order1["text"]]
                 order2 = base**order_source[self.Lb_order2["text"]]
-                conversion1 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-                conversion2 = self.dict_units[self.dict_mag[self.Cb_opt1.get()]][self.Cb_opt3.get()]
+                conversion1 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt2.get()]
+                conversion2 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt3.get()]
                 self.lab_val2.config(text = "{:.1e}".format(self.val2.get()*order2))
                 self.val1.set((self.val2.get()*order2*conversion2)/(order1*conversion1))
                 self.val1_old.set(self.val1.get())

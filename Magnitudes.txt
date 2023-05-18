@@ -1,0 +1,24 @@
+Mass
+gram (g),Av. pound (lb),Av. ounce (oz)
+1.0,453.6,28.35
+Length
+meter (m),inch (in),yard (yd),mile (mi)
+1.0,0.0254,0.9144,1609.34
+Area
+square meter (m2),square inch (in2),square yard (yd2),square mile (mi2)
+1.0,0.00064516,0.836127,2.59E6
+Volume
+cubic meter (m3),litre (l),Imp. pint (pt),US pint (pt)
+1.0,0.001,0.000568261,0.000473176
+Time
+second (s),minute (min),hour (hr),day (d)
+1.0,60,3600,86400
+Energy
+jule (J),calorie (cal),electronvolt (Ev),watt-hour (Wh)
+1.0,4.184,1.6022E-19,3600
+Pressure
+Pascal (Pa),bar (b),atmosphere (atm),mm Hg,Torr (Torr)
+1.0,100000,101325,133.322,133.322
+Data
+bit (b),byte (B)
+1.0,8.0
