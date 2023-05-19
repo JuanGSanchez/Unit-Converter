@@ -50,6 +50,7 @@ class Magnitude(dict):
     name = property(_get_name, _set_name)
 
 
+
 # ================= UI class ====================
 
 class UC_UI(Tk):
@@ -108,7 +109,7 @@ class UC_UI(Tk):
                 for var1, var2 in np.array([list(body[i*3 + 1].split(',')), list(body[i*3 + 2].split(','))]).transpose():
                     if '2' in var1:
                         var1 = var1.replace('2', '\u00B2')
-                    if '3' in var1:
+                    elif '3' in var1:
                         var1 = var1.replace('3', '\u00B3')
                     self.magnitudes[-1][str(var1)] = float(var2)
         self.magnitudes.append({'' : 0, ' ' : 1})
@@ -293,6 +294,7 @@ class UC_UI(Tk):
         lab.config(text = init)
 
 
+    ''' Function to reset the order of magnitude and update the result '''
     def reset_order(self, lab):
         lab.config(text = '1')
 
