@@ -29,28 +29,6 @@ __license__ = 'GPLv3'
 
 
 
-# ================= Magnitude class =============
-
-'''
-Customized class to associate a magnitude' data to a single variable.
-This class contains to main attributes:
-    name, string that assigns the name of the magnitude
-    values, dictionary that associates the transformation values
-        or expressions between an initial unit and the rest; the
-        keys are the name of the units, the values are the
-        transformation values or expressions
-'''
-class Magnitude(dict):
-    def _get_name(self):
-        return self.__name
-    def _set_name(self, value):
-        if not isinstance(value, str):
-            raise TypeError("name must be set to a string")
-        self.__name = value
-    name = property(_get_name, _set_name)
-
-
-
 # ================= UI class ====================
 
 class UC_UI(Tk):
@@ -103,8 +81,7 @@ class UC_UI(Tk):
                 self.exit()
             self.magnitudes = []
             for i in range(len(body)//3):
-                self.magnitudes.append(Magnitude())
-                self.magnitudes[-1].name = body[i*3]
+                self.magnitudes.append({})
                 self.magnitudes_names[body[i*3]] = i
                 for var1, var2 in np.array([list(body[i*3 + 1].split(',')), list(body[i*3 + 2].split(','))]).transpose():
                     if '2' in var1:
