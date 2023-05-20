@@ -38,7 +38,11 @@ class UC_UI(Tk):
 # Main properties of the UI
         Tk.__init__(self)
         self.title(__title__)
-        self.geometry('235x385+800+350')
+        width = 235
+        height = 385
+        x_pos = (self.winfo_screenwidth() - width - self.winfo_rootx() + self.winfo_x())//2
+        y_pos = (self.winfo_screenheight() - height - self.winfo_rooty() + self.winfo_y())//2
+        self.geometry('{}x{}+{}+{}'.format(width, height, x_pos, y_pos))
         self.resizable(False, False)
         self.lift()
         self.focus_force()
