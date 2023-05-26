@@ -349,7 +349,7 @@ class UC_UI(Tk):
 
     ''' Exit function '''
     def exit(self):
-        print('Exiting FF Explorer...')
+        print('Exiting Unit Converter...')
         self.quit()
         self.destroy()
         for name in dir():
