@@ -87,7 +87,7 @@ class UC_UI(Tk):
             for i in range(len(body)//3):
                 self.magnitudes.append({})
                 self.magnitudes_names[body[i*3]] = i
-                for var1, var2 in np.array([list(body[i*3 + 1].split(',')), list(body[i*3 + 2].split(','))]).transpose():
+                for var1, var2 in zip(body[i*3 + 1].split(','), body[i*3 + 2].split(',')):
                     if '2' in var1:
                         var1 = var1.replace('2', '\u00B2')
                     elif '3' in var1:
