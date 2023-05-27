@@ -16,6 +16,9 @@ second (s),minute (min),hour (hr),day (d)
 Energy
 jule (J),calorie (cal),electronvolt (Ev),watt-hour (Wh)
 1.0,4.184,1.6022E-19,3600
+Power
+watt (W),kgm/s,cal/h,erg/s,HP,CV
+1.0,9.806215,1163.0556,1E-7,745.7,735.35375
 Pressure
 Pascal (Pa),bar (b),atmosphere (atm),mm Hg,Torr (Torr)
 1.0,100000,101325,133.322,133.322
