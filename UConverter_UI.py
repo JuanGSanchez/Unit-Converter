@@ -10,7 +10,7 @@ Juan García Sánchez, 2023
 ###############################################################################
 
 from tkinter import *
-from tkinter import ttk, font, messagebox, filedialog, PhotoImage
+from tkinter import ttk, font, PhotoImage
 import numpy as np
 import os
 import gc
@@ -55,11 +55,11 @@ class UC_UI(Tk):
         default_font.configure(family = 'TimesNewRoman', size = 12)
         self.option_add("*Font", default_font)  # Default font      
 
-        self.font_title = {'bg' : '#999999', 'fg' : 'blue', 'font' : 'Arial 12 bold'}
-        self.font_entry = {'bg' : 'white', 'fg' : 'black', 'font' : 'Verdana 11'}
-        self.font_val = {'bg' : '#bfbfbf', 'fg' : 'black', 'font' : 'Verdana 11'}
-        self.font_text = {'bg' : '#bfbfbf', 'fg' : 'black', 'font' : 'Verdana 12'}
-        self.font_man = {'bg' : 'darkblue', 'font' : "Arial 11", 'fg' : 'white'}
+        font_title = {'bg' : '#999999', 'fg' : 'blue', 'font' : 'Arial 12 bold'}
+        font_entry = {'bg' : 'white', 'fg' : 'black', 'font' : 'Verdana 11'}
+        font_val = {'bg' : '#bfbfbf', 'fg' : 'black', 'font' : 'Verdana 11'}
+        font_text = {'bg' : '#bfbfbf', 'fg' : 'black', 'font' : 'Verdana 12'}
+        font_man = {'bg' : 'darkblue', 'font' : "Arial 11", 'fg' : 'white'}
 
 # UI variables
         ''' Dictionary of the magnitudes in the program '''
@@ -103,7 +103,7 @@ class UC_UI(Tk):
 
 # UI layout
         '''Magnitude selection, among the ones that have been added to the application'''
-        lab_mag = Label(self, text = "Magnitude", justify = CENTER, bd = 2, width = 18, **self.font_title)
+        lab_mag = Label(self, text = "Magnitude", justify = CENTER, bd = 2, width = 18, **font_title)
         lab_mag.grid(row = 0, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5)
         self.Cb_opt1 = ttk.Combobox(self, values = list(self.magnitudes_names.keys()), background = "#e6e6e6", state = "readonly", width = 18)
         self.Cb_opt1.set(list(self.magnitudes_names.keys())[0])
@@ -111,9 +111,9 @@ class UC_UI(Tk):
         self.Cb_opt1.bind("<<ComboboxSelected>>", self.mag_selection)
 
         '''First unit selection, including order of magnitude and actual value in scientific notation'''
-        lab_unit1 = Label(self, text = "From:", anchor = W, bd = 2, width = 10, **self.font_text)
+        lab_unit1 = Label(self, text = "From:", anchor = W, bd = 2, width = 10, **font_text)
         lab_unit1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        self.lab_val1 = Label(self, text = "{:.1e}".format(self.val1.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        self.lab_val1 = Label(self, text = "{:.1e}".format(self.val1.get()), justify = CENTER, bd = 2, width = 7, **font_val)
         self.lab_val1.grid(row = 2, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
         self.Lb_order1 = Label(self, text = "1", relief = RIDGE, width = 2)
         self.Lb_order1.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
@@ -122,7 +122,7 @@ class UC_UI(Tk):
         self.Cb_opt2 = ttk.Combobox(self, background = "#e6e6e6", state = DISABLED, width = 14)
         self.Cb_opt2.grid(row = 3, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
         self.Cb_opt2.bind("<<ComboboxSelected>>", lambda event: self.unit_converter(1))
-        self.ent_unit1 = Entry(self, name = 'unit1', textvariable = self.val1, justify = LEFT, bd = 5, relief = SUNKEN, state = DISABLED, width = 13, **self.font_entry)
+        self.ent_unit1 = Entry(self, name = 'unit1', textvariable = self.val1, justify = LEFT, bd = 5, relief = SUNKEN, state = DISABLED, width = 13, **font_entry)
         self.ent_unit1.grid(row = 4, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = W)
         self.ent_unit1.bind("<MouseWheel>", lambda event: self.ent_unit1.xview_scroll(int(event.delta/40), 'units'))
         self.Lb_sweep1 = Label(self, text = "...", bg = 'white', relief = GROOVE, width = 2)
@@ -131,9 +131,9 @@ class UC_UI(Tk):
         self.Lb_sweep1.bind('<1>', lambda event: self.Lb_sweep1.config(text = '...'))
 
         '''Second unit selection, including order of magnitude and actual value in scientific notation'''
-        lab_unit2 = Label(self, text = "To:", anchor = W, bd = 2, width = 10, **self.font_text)
+        lab_unit2 = Label(self, text = "To:", anchor = W, bd = 2, width = 10, **font_text)
         lab_unit2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 10, ipady = 5, sticky = W)
-        self.lab_val2 = Label(self, text = "{:.1e}".format(self.val2.get()), justify = CENTER, bd = 2, width = 7, **self.font_val)
+        self.lab_val2 = Label(self, text = "{:.1e}".format(self.val2.get()), justify = CENTER, bd = 2, width = 7, **font_val)
         self.lab_val2.grid(row = 5, column = 0, padx = 10, pady = 7, ipadx = 1, ipady = 5, sticky = E)
         self.Lb_order2 = Label(self, text = "1", relief = RIDGE, width = 2)
         self.Lb_order2.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 5, ipady = 5, sticky = W)
@@ -142,7 +142,7 @@ class UC_UI(Tk):
         self.Cb_opt3 = ttk.Combobox(self, background = "#e6e6e6", state = DISABLED, width = 14)
         self.Cb_opt3.grid(row = 6, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = E)
         self.Cb_opt3.bind("<<ComboboxSelected>>", lambda event: self.unit_converter(1))
-        self.ent_unit2 = Entry(self, name = 'unit2', textvariable = self.val2, justify = LEFT, bd = 5, relief = SUNKEN, state = DISABLED,  width = 13, **self.font_entry)
+        self.ent_unit2 = Entry(self, name = 'unit2', textvariable = self.val2, justify = LEFT, bd = 5, relief = SUNKEN, state = DISABLED,  width = 13, **font_entry)
         self.ent_unit2.grid(row = 7, column = 0, padx = 10, pady = 5, ipadx = 10, ipady = 5, sticky = W)
         self.ent_unit2.bind("<MouseWheel>", lambda event: self.ent_unit2.xview_scroll(int(event.delta/40), 'units'))
         self.Lb_sweep2 = Label(self, text = "...", bg = 'white', relief = GROOVE, width = 2)
@@ -161,7 +161,7 @@ class UC_UI(Tk):
         fr_man.overrideredirect(True)
         fr_man.wm_attributes('-alpha', 0.8)
         fr_man.withdraw()
-        self.fr_lab = Label(fr_man, justify = LEFT, bd = 2, **self.font_man)
+        self.fr_lab = Label(fr_man, justify = LEFT, bd = 2, **font_man)
         self.fr_lab.grid(padx = 1, pady = 1, sticky = W)
         self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [204, 33, 290, 30], text_man1))
         self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [161, 39, 150, 45], text_man2))
