@@ -245,8 +245,8 @@ class UC_UI(Tk):
     ''' Change input values with up and down keys '''
     def change_values(self, event, e, lab, opt):
         if self.Cb_opt1.get() != '*Select magnitude*':
-            self.check_value(self.val1)
-            self.check_value(self.val2)
+            self.check_value(self.val1, self.val1_old)
+            self.check_value(self.val2, self.val2_old)
 
             if str(event.widget)[-1] == '1':
                 decimals = len(str(self.val1.get()).split('.')[-1]) if self.Lb_sweep1['text'] == '...' else -int(self.Lb_sweep1['text'])
@@ -286,11 +286,11 @@ class UC_UI(Tk):
 
 
     ''' Check if there is a number in the tkinter variable '''
-    def check_value(self, val):
+    def check_value(self, new_val, old_val):
         try:
-            val.get()
+            new_val.get()
         except:
-            val.set(0)
+            new_val.set(old_val.get())
 
 
     ''' Unit converter main function '''
@@ -303,8 +303,8 @@ class UC_UI(Tk):
                 order_source = self.dict_order1
                 base = 10
 
-            self.check_value(self.val1)
-            self.check_value(self.val2)
+            self.check_value(self.val1, self.val1_old)
+            self.check_value(self.val2, self.val2_old)
 
             if self.val1.get() != self.val1_old.get() or e == 1:
                 if self.val1.get() < 0:
