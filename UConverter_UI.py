@@ -309,6 +309,8 @@ class UC_UI(Tk):
             if self.val1.get() != self.val1_old.get() or e == 1:
                 if self.val1.get() < 0:
                     self.val1.set(0)
+                elif self.val1.get() == np.inf:
+                    self.val1.set(0)
                 self.val1_old.set(self.val1.get())
                 order1 = base**order_source[self.Lb_order1["text"]]
                 order2 = base**order_source[self.Lb_order2["text"]]
@@ -320,6 +322,8 @@ class UC_UI(Tk):
                 self.lab_val2.config(text = "{:.1e}".format(self.val2.get()))
             elif self.val2.get() != self.val2_old.get() or e == 2:
                 if self.val2.get() < 0:
+                    self.val2.set(0)
+                elif self.val2.get() == np.inf:
                     self.val2.set(0)
                 self.val2_old.set(self.val2.get())
                 order1 = base**order_source[self.Lb_order1["text"]]
