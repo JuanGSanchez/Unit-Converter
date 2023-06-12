@@ -163,15 +163,15 @@ class UC_UI(Tk):
         fr_man.withdraw()
         self.fr_lab = Label(fr_man, justify = LEFT, bd = 2, **font_man)
         self.fr_lab.grid(padx = 1, pady = 1, sticky = W)
-        self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [204, 33, 290, 30], text_man1))
-        self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [161, 39, 150, 45], text_man2))
-        self.ent_unit2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [161, 39, 150, 45], text_man2))
-        self.Lb_order1.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [33, 33, 248, 45], text_man3))
-        self.Lb_order2.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [33, 33, 248, 45], text_man3))
-        self.Lb_sweep1.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [33, 33, 253, 45], text_man4))
-        self.Lb_sweep2.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [33, 33, 253, 45], text_man4))
-        self.lab_val1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 33, 255, 30], text_man5))
-        self.lab_val2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [70, 33, 255, 30], text_man5))
+        self.Cb_opt1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [self.Cb_opt1, self.fr_lab], text_man1))
+        self.ent_unit1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [self.ent_unit1, self.fr_lab], text_man2))
+        self.ent_unit2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [self.ent_unit2, self.fr_lab], text_man2))
+        self.Lb_order1.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [self.Lb_order1, self.fr_lab], text_man3))
+        self.Lb_order2.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [self.Lb_order2, self.fr_lab], text_man3))
+        self.Lb_sweep1.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [self.Lb_sweep1, self.fr_lab], text_man4))
+        self.Lb_sweep2.bind("<Motion>", lambda event: self.show_manual(event, fr_man, [self.Lb_sweep2, self.fr_lab], text_man4))
+        self.lab_val1.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [self.lab_val1, self.fr_lab], text_man5))
+        self.lab_val2.bind("<Motion>", lambda event : self.show_manual(event, fr_man, [self.lab_val2, self.fr_lab], text_man5))
 
 # UI contextual menu
         self.menucontext = Menu(self, tearoff = 0)
@@ -338,10 +338,11 @@ class UC_UI(Tk):
 
     ''' Show manual widget '''
     def show_manual(self, e, fr, pos, text_man):
-        if 0 < e.x < pos[0] and 0 < e.y < pos[1]:
+        if 0 < e.x < pos[0].winfo_width() - 5 and 0 < e.y < pos[0].winfo_height() - 5:
             fr.deiconify()
             self.fr_lab.config(text = text_man)
-            fr.geometry('{}x{}+{}+{}'.format(pos[2], pos[3], e.x_root + 20, e.y_root + 20))
+            self.update()
+            fr.geometry('{}x{}+{}+{}'.format(pos[1].winfo_width() + 5, pos[1].winfo_height() + 5, e.x_root + 20, e.y_root + 20))
         else:
             fr.withdraw()
 
