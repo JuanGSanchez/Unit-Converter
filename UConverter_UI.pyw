@@ -11,9 +11,13 @@ Juan García Sánchez, 2023
 
 from tkinter import *
 from tkinter import ttk, font, PhotoImage
-import numpy as np
+import math
 import os
-import gc
+
+# Core service layer — pure, UI-independent conversion logic.
+# The GUI delegates all conversion math and data loading to this package.
+from unit_converter.core import converter as _core
+from unit_converter.core.data_loader import MagnitudeDataError
 
 
 
@@ -22,9 +26,9 @@ import gc
 __author__ = 'Juan García Sánchez'
 __title__= 'U Converter'
 __rootf__ = os.path.dirname(__file__)
-__version__ = '1.0'
-__datver__ = '05-2023'
-__pyver__ = '3.10.9'
+__version__ = '1.1.0'
+__datver__ = '06-2026'
+__pyver__ = '3.11'
 __license__ = 'GPLv3'
 
 
@@ -71,28 +75,25 @@ class UC_UI(Tk):
         ''' Dictionary of the magnitudes in the program, for data magnitude '''
         self.dict_order2 = {'1' : 0, 'k' : 1, 'M' : 2, 'G' : 3, 'T' : 4, 'P' : 5, 'E' : 6, 'Z' : 7, 'Y' : 8, 'R' : 9, 'Q' : 10}
 
-        ''' List of magnitudes with their units and conversions associated, from database file "Magnitudes.txt".
-         Instruction must be followed for a correct management and update of this file: for each magnitude,
-            First line, magnitude's name
-            Second line, names of the units, comma separated
-            Third line, conversion factors associated to previous units, in the same order
-         Magnitudes can be rearranged in any order inside the file, but always following this structure.
-         Avoid empty end line.'''
-        with open(__rootf__ + "/Magnitudes.txt", 'r') as fl:
-            body = fl.read().splitlines()
-            if len(body)%3 != 0:
-                print('Bad magnitude database structure, leaving UConverter...')
-                self.exit()
-            self.magnitudes = []
-            for i in range(len(body)//3):
-                self.magnitudes.append({})
-                self.magnitudes_names[body[i*3]] = i
-                for var1, var2 in zip(body[i*3 + 1].split(','), body[i*3 + 2].split(',')):
-                    if '2' in var1:
-                        var1 = var1.replace('2', '\u00B2')
-                    elif '3' in var1:
-                        var1 = var1.replace('3', '\u00B3')
-                    self.magnitudes[-1][str(var1)] = float(var2)
+        # --- Load magnitude database via the validated core loader ---
+        # The loader searches for magnitudes.toml first, then falls back to the
+        # legacy Magnitudes.txt.  Structured errors replace the original
+        # print()+self.exit() pattern.
+        try:
+            _raw_db = _core._get_db()
+        except MagnitudeDataError as exc:
+            print(f'Bad magnitude database: {exc}\nLeaving UConverter...')
+            self.destroy()
+            return
+
+        # Build the same internal structures the UI code expects:
+        #   self.magnitudes       \u2014 list of {unit_name: factor} dicts, indexed by magnitude index
+        #   self.magnitudes_names \u2014 {'*Select magnitude*': -1, 'Mass': 0, 'Length': 1, ...}
+        self.magnitudes = []
+        for mag_name, units_dict in _raw_db.items():
+            self.magnitudes_names[mag_name] = len(self.magnitudes)
+            self.magnitudes.append(dict(units_dict))
+        # Sentinel empty magnitude used by the UI when no magnitude is selected
         self.magnitudes.append({'' : 0, ' ' : 1})
 
         ''' Values and control derivatives '''
@@ -250,10 +251,10 @@ class UC_UI(Tk):
 
             if str(event.widget)[-1] == '1':
                 decimals = len(str(self.val1.get()).split('.')[-1]) if self.Lb_sweep1['text'] == '...' else -int(self.Lb_sweep1['text'])
-                self.val1.set(np.round(self.val1.get() + e*10**(-decimals), decimals))
+                self.val1.set(round(self.val1.get() + e*10**(-decimals), decimals))
             else:
                 decimals = len(str(self.val2.get()).split('.')[-1]) if self.Lb_sweep2['text'] == '...' else -int(self.Lb_sweep2['text'])
-                self.val2.set(np.round(self.val2.get() + e*10**(-decimals), decimals))
+                self.val2.set(round(self.val2.get() + e*10**(-decimals), decimals))
 
             self.unit_converter(opt)
 
@@ -293,47 +294,60 @@ class UC_UI(Tk):
             new_val.set(old_val.get())
 
 
-    ''' Unit converter main function '''
+    ''' Unit converter main function — delegates math to the pure core. '''
     def unit_converter(self, e = 0):
         if self.Cb_opt1.get() != '*Select magnitude*':
-            if self.Cb_opt1.get() == 'Data':
-                order_source = self.dict_order2
-                base = 1024
-            else:
-                order_source = self.dict_order1
-                base = 10
+            magnitude = self.Cb_opt1.get()
 
             self.check_value(self.val1, self.val1_old)
             self.check_value(self.val2, self.val2_old)
 
             if self.val1.get() != self.val1_old.get() or e == 1:
-                if self.val1.get() < 0:
-                    self.val1.set(0)
-                elif self.val1.get() == np.inf:
+                # Clamp negative / inf inputs (policy preserved from original).
+                if self.val1.get() < 0 or self.val1.get() == math.inf:
                     self.val1.set(0)
                 self.val1_old.set(self.val1.get())
-                order1 = base**order_source[self.Lb_order1["text"]]
-                order2 = base**order_source[self.Lb_order2["text"]]
-                conversion1 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-                conversion2 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt3.get()]
-                self.lab_val1.config(text = "{:.1e}".format(self.val1.get()*order1))
-                self.val2.set((self.val1.get()*order1*conversion1)/(order2*conversion2))
-                self.val2_old.set(self.val2.get())
-                self.lab_val2.config(text = "{:.1e}".format(self.val2.get()))
+
+                # Compute display order multiplier for the scientific-notation label.
+                order_from = self.Lb_order1["text"]
+                order_to   = self.Lb_order2["text"]
+                order_mult = _core.DICT_ORDER_IEC if magnitude == 'Data' else _core.DICT_ORDER_SI
+                base       = 1024 if magnitude == 'Data' else 10
+                order1_val = base ** order_mult[order_from]
+
+                self.lab_val1.config(text = "{:.1e}".format(self.val1.get() * order1_val))
+
+                result = _core.convert(
+                    magnitude, self.val1.get(),
+                    self.Cb_opt2.get(), self.Cb_opt3.get(),
+                    from_order=order_from, to_order=order_to,
+                )
+                self.val2.set(result)
+                self.val2_old.set(result)
+                self.lab_val2.config(text = "{:.1e}".format(result))
+
             elif self.val2.get() != self.val2_old.get() or e == 2:
-                if self.val2.get() < 0:
-                    self.val2.set(0)
-                elif self.val2.get() == np.inf:
+                # Clamp negative / inf inputs.
+                if self.val2.get() < 0 or self.val2.get() == math.inf:
                     self.val2.set(0)
                 self.val2_old.set(self.val2.get())
-                order1 = base**order_source[self.Lb_order1["text"]]
-                order2 = base**order_source[self.Lb_order2["text"]]
-                conversion1 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt2.get()]
-                conversion2 = self.magnitudes[self.magnitudes_names[self.Cb_opt1.get()]][self.Cb_opt3.get()]
-                self.lab_val2.config(text = "{:.1e}".format(self.val2.get()*order2))
-                self.val1.set((self.val2.get()*order2*conversion2)/(order1*conversion1))
-                self.val1_old.set(self.val1.get())
-                self.lab_val1.config(text = "{:.1e}".format(self.val1.get()))
+
+                order_from = self.Lb_order1["text"]
+                order_to   = self.Lb_order2["text"]
+                order_mult = _core.DICT_ORDER_IEC if magnitude == 'Data' else _core.DICT_ORDER_SI
+                base       = 1024 if magnitude == 'Data' else 10
+                order2_val = base ** order_mult[order_to]
+
+                self.lab_val2.config(text = "{:.1e}".format(self.val2.get() * order2_val))
+
+                result = _core.convert(
+                    magnitude, self.val2.get(),
+                    self.Cb_opt3.get(), self.Cb_opt2.get(),
+                    from_order=order_to, to_order=order_from,
+                )
+                self.val1.set(result)
+                self.val1_old.set(result)
+                self.lab_val1.config(text = "{:.1e}".format(result))
 
 
     ''' Show manual widget '''
@@ -354,18 +368,21 @@ class UC_UI(Tk):
 
     ''' Exit function '''
     def exit(self):
+        # Proper Tkinter teardown: quit the event loop then destroy the window.
+        # The original cargo-cult pattern (del locals() loop, gc.collect(), del self)
+        # has been removed — it was a no-op at best and misleading at worst.
         print('Exiting Unit Converter...')
         self.quit()
         self.destroy()
-        for name in dir():
-            if not name.startswith('_'):
-                del locals()[name]
-        gc.collect()
-        del self
 
 
 
 # ================= UI execution ================
 
-if __name__ == '__main__':
+def main_tkinter() -> None:
+    """Console-scripts entry point for the Tkinter UI (declared in pyproject.toml)."""
     UC_UI()
+
+
+if __name__ == '__main__':
+    main_tkinter()
