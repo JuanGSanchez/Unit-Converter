@@ -1,12 +1,14 @@
 # Unit-Converter — In-Repo Agent Operating Guide
 
 This document describes how an external agent (or any automated client) should drive the
-Unit-Converter repository via its access layer. It is the operating guide that the in-repo
-Claude agent asset (see below) references.
+Unit-Converter repository via its access layer.
 
-> **In-repo agent asset:** [`.claude/agents/unit-conversion-operator.md`](../.claude/agents/unit-conversion-operator.md)
-> — the `unit-conversion-operator` Claude Code subagent that drives this repo's conversion
-> capability headlessly through the MCP/REST access layer described below.
+> **In-repo agent assets:**
+> - [`.claude/agents/unit-conversion-operator.md`](../.claude/agents/unit-conversion-operator.md)
+>   — the `unit-conversion-operator` Claude Code subagent: drives conversions headlessly via MCP/REST.
+> - [`.claude/agents/unit-converter-maintainer.md`](../.claude/agents/unit-converter-maintainer.md)
+>   — the `unit-converter-maintainer` Claude Code subagent: implements backlog items, fixes bugs,
+>   edits code/tests/data/docs.
 
 ---
 
@@ -14,28 +16,34 @@ Claude agent asset (see below) references.
 
 1. [What this repo does for agents](#what-this-repo-does-for-agents)
 2. [Starting the access layer](#starting-the-access-layer)
-3. [Available tools](#available-tools)
+3. [Available tools (16 operations)](#available-tools-16-operations)
 4. [Workflow: performing a conversion](#workflow-performing-a-conversion)
-5. [Workflow: discovering available units](#workflow-discovering-available-units)
-6. [Input/output reference](#inputoutput-reference)
-7. [Transport selection guide](#transport-selection-guide)
-8. [Error handling for agents](#error-handling-for-agents)
-9. [What the agent does NOT control](#what-the-agent-does-not-control)
+5. [Workflow: currency conversion](#workflow-currency-conversion)
+6. [Workflow: compound unit conversion](#workflow-compound-unit-conversion)
+7. [Workflow: history and favorites](#workflow-history-and-favorites)
+8. [Workflow: custom units](#workflow-custom-units)
+9. [Input/output reference](#inputoutput-reference)
+10. [Transport selection guide](#transport-selection-guide)
+11. [Error handling for agents](#error-handling-for-agents)
+12. [What the agent does NOT control](#what-the-agent-does-not-control)
 
 ---
 
 ## What this repo does for agents
 
-Unit-Converter exposes a **read-only, compute-only** service. There are no write or
-stateful operations. An agent uses it to:
+Unit-Converter exposes a **compute + state service** through its access layer. An agent uses it to:
 
-- Enumerate available **magnitudes** (physical quantities).
-- Enumerate available **units** within a magnitude.
+- Enumerate available **magnitudes** (physical quantities) and their **units**.
 - **Convert** a numeric value between any two units within a magnitude, with optional
-  SI or IEC binary order-of-magnitude prefixes.
+  SI or IEC binary order-of-magnitude prefixes and significant-figure rounding.
+- Convert **compound/derived units** (e.g. `km/h → m/s`) using expression parsing.
+- Fetch **live currency exchange rates** (Frankfurter, cached dated table, offline fallback)
+  and convert amounts between ISO 4217 currency codes.
+- Read and write **conversion history** and **favorites** persisted in `~/.unit-converter/`.
+- **Add custom user-defined units** persisted to `~/.unit-converter/custom.toml`.
 
-All computation is deterministic and stateless — the same inputs always produce the same
-output.
+Core unit conversion is deterministic and stateless. Currency rates, history, and custom
+units are stateful (file-backed, per-user).
 
 ---
 
@@ -74,36 +82,38 @@ MCP client configuration:
 
 ---
 
-## Available tools
+## Available tools (16 operations)
 
-| Tool name | Transport | Description |
-|-----------|-----------|-------------|
-| `health` | REST + MCP | Liveness check; returns status and version |
-| `get_magnitudes` | REST + MCP | Sorted list of all magnitude names |
-| `get_units` | REST + MCP | Units and base unit for a given magnitude |
-| `post_convert` | REST + MCP | Perform a unit conversion (primary tool) |
+| Tool name | REST equivalent | Description |
+|-----------|-----------------|-------------|
+| `health` | `GET /health` | Liveness check; returns status and version |
+| `get_magnitudes` | `GET /magnitudes` | Sorted list of all magnitude names |
+| `get_units` | `GET /magnitudes/{magnitude}/units` | Units and base unit for a magnitude |
+| `post_convert` | `POST /convert` | Convert a value between units (primary tool) |
+| `get_parse_compound` | `GET /convert/compound/parse` | Parse a compound unit expression |
+| `post_convert_compound` | `POST /convert/compound` | Convert using compound unit expressions |
+| `list_currencies` | `GET /currencies` | List supported ISO 4217 currency codes |
+| `get_currency_rate` | `GET /currencies/rate` | Exchange rate for a currency pair |
+| `post_convert_currency` | `POST /currencies/convert` | Convert an amount between currencies |
+| `post_refresh_rates` | `POST /currencies/refresh` | Force-refresh the rate cache |
+| `get_history` | `GET /history` | Full conversion history |
+| `get_favorites` | `GET /history/favorites` | Favorited history entries |
+| `post_record_conversion` | `POST /history/record` | Append a conversion to history |
+| `post_add_favorite` | `POST /history/favorites` | Mark a history entry as a favorite |
+| `delete_history` | `DELETE /history` | Clear all history |
+| `post_add_custom_unit` | `POST /units/custom` | Add a custom unit to the user database |
 
-All four tools are available on both the Streamable HTTP MCP endpoint (`/mcp`) and the
+All 16 tools are available on both the Streamable HTTP MCP endpoint (`/mcp`) and the
 stdio MCP server.
-
-The REST equivalents (for HTTP-native agents) are:
-
-| Tool | REST endpoint |
-|------|---------------|
-| `health` | `GET /health` |
-| `get_magnitudes` | `GET /magnitudes` |
-| `get_units` | `GET /magnitudes/{magnitude}/units` |
-| `post_convert` | `POST /convert` |
 
 ---
 
 ## Workflow: performing a conversion
 
-The typical agent workflow is:
-
 1. (Optional) Call `get_magnitudes` to confirm the magnitude name.
 2. (Optional) Call `get_units` to confirm exact unit name strings.
-3. Call `post_convert` with the magnitude, value, source unit, and target unit.
+3. Call `post_convert` with magnitude, value, source unit, target unit, and (optionally)
+   `from_order`, `to_order`, and `sig_figs`.
 
 ### Minimal example — convert 1 pound to grams
 
@@ -115,14 +125,11 @@ The typical agent workflow is:
   "from_unit": "Av. pound (lb)",
   "to_unit": "gram (g)"
 }
-```
-
-```json
 // post_convert output
 { "result": 453.6 }
 ```
 
-### Example with SI prefix — convert 5 km to meters
+### With SI prefix and significant figures — 5 km to meters, 3 sig figs
 
 ```json
 {
@@ -131,15 +138,13 @@ The typical agent workflow is:
   "from_unit": "meter (m)",
   "to_unit": "meter (m)",
   "from_order": "k",
-  "to_order": "1"
+  "to_order": "1",
+  "sig_figs": 3
 }
+// -> { "result": 5000.0 }
 ```
 
-```json
-{ "result": 5000.0 }
-```
-
-### Example with IEC binary prefix — convert 2 GiB to bytes (Data magnitude)
+### IEC binary prefix — 2 GiB to bytes (Data magnitude)
 
 ```json
 {
@@ -150,36 +155,79 @@ The typical agent workflow is:
   "from_order": "G",
   "to_order": "1"
 }
+// -> { "result": 2147483648.0 }
 ```
 
-```json
-{ "result": 2147483648.0 }
-```
-
-Note: the `Data` magnitude uses IEC binary prefixes (base 1024). The same prefix symbol
-`"G"` means gibi (1024^3) for Data, but giga (10^9) for all other magnitudes.
+Note: `"G"` means gibi (1024³) for `Data`, but giga (10⁹) for all other magnitudes.
 
 ---
 
-## Workflow: discovering available units
+## Workflow: currency conversion
 
-To enumerate all units the agent can use:
+1. (Optional) Call `list_currencies` to get the available ISO 4217 codes.
+2. Call `post_convert_currency` (or `get_currency_rate` if you need only the rate).
 
 ```json
-// get_magnitudes -> ["Area", "Data", "Energy", "Length", "Mass", "Power", "Pressure", "Time", "Volume"]
-
-// get_units input
-{ "magnitude": "Mass" }
-
-// get_units output
-{
-  "units": ["gram (g)", "Av. pound (lb)", "Av. ounce (oz)"],
-  "base_unit": "gram (g)"
-}
+// post_convert_currency input
+{ "from": "EUR", "to": "USD", "value": 100 }
+// output
+{ "result": 108.2, "rate": 1.082, "date": "2026-06-13", "is_stale": false }
 ```
 
-Unit names are **case-sensitive** and must be passed to `post_convert` exactly as
-returned by `get_units`.
+`is_stale: true` means the cache is from a prior date. Call `post_refresh_rates` to fetch
+fresh data from Frankfurter. HTTP 503 if Frankfurter is unreachable.
+
+---
+
+## Workflow: compound unit conversion
+
+1. (Optional) Call `get_parse_compound` to inspect factor and dimensions of an expression.
+2. Call `post_convert_compound` with a value and two expression strings.
+
+```json
+// post_convert_compound input
+{ "value": 100, "from_expr": "km/h", "to_expr": "m/s" }
+// output
+{ "result": 27.778, "from_expr": "km/h", "to_expr": "m/s" }
+```
+
+HTTP 422 on dimension mismatch, unknown unit atoms, or syntax errors in either expression.
+
+---
+
+## Workflow: history and favorites
+
+```json
+// Record a conversion
+// POST /history/record input:
+{
+  "magnitude": "Mass", "value": 1.0,
+  "from_unit": "Av. pound (lb)", "to_unit": "gram (g)", "result": 453.6
+}
+
+// Mark as favorite
+// POST /history/favorites input:
+{ "timestamp": "2026-06-13T10:00:00Z", "label": "lb to g baseline" }
+
+// Retrieve favorites
+// GET /history/favorites output: [ { "magnitude": "Mass", ..., "favorite": true, "favorite_label": "lb to g baseline" } ]
+
+// Clear history
+// DELETE /history output: { "cleared": true }
+```
+
+---
+
+## Workflow: custom units
+
+```json
+// POST /units/custom input:
+{ "magnitude": "Mass", "unit_name": "stone (st)", "factor": 6350.29 }
+// output (HTTP 201):
+{ "magnitude": "Mass", "unit_name": "stone (st)", "factor": 6350.29 }
+```
+
+After adding, `stone (st)` is immediately available in `get_units("Mass")` and `post_convert`.
 
 ---
 
@@ -195,6 +243,7 @@ returned by `get_units`.
 | `to_unit` | string | yes | — | Exact name from `get_units`. |
 | `from_order` | string | no | `"1"` | SI prefix key, or `"1"` for no prefix. IEC for Data. |
 | `to_order` | string | no | `"1"` | SI prefix key, or `"1"` for no prefix. IEC for Data. |
+| `sig_figs` | integer | no | `null` | Round result to N significant figures (positive integer). |
 
 ### SI prefix keys (all magnitudes except Data)
 
@@ -206,7 +255,7 @@ returned by `get_units`.
 
 `1 k M G T P E Z Y R Q`
 
-`"1"` means no prefix. `"k"` = 1024, `"M"` = 1024^2, `"G"` = 1024^3, etc.
+`"1"` means no prefix. `"k"` = 1024, `"M"` = 1024², `"G"` = 1024³, etc.
 
 ### post_convert output
 
@@ -214,7 +263,9 @@ returned by `get_units`.
 { "result": <float> }
 ```
 
-A `result` of `0.0` may mean the input value was zero or was clamped (negative/NaN/inf).
+A `result` of `0.0` may mean the input was zero, or was clamped (negative/NaN/inf). A
+genuine input of `0.0` also returns `{"result": 0.0}` — distinguish the two in your report
+rather than asserting a clamp occurred when the input was simply zero.
 
 ---
 
@@ -234,10 +285,13 @@ A `result` of `0.0` may mean the input value was zero or was clamped (negative/N
 | Error condition | HTTP status | MCP `isError` | `detail` message pattern |
 |----------------|-------------|---------------|--------------------------|
 | Unknown magnitude | 422 | true | `"Unknown magnitude: 'X'. Available: [...]"` |
-| Unknown unit | 422 | true | `"Unknown unit 'X' in magnitude 'Y'. Available: [...]"` |
+| Unknown / incompatible unit | 422 | true | `"Unknown unit 'X' in magnitude 'Y'. Available: [...]"` |
 | Unknown order prefix | 422 | true | `"Unknown order prefix 'X' for magnitude 'Y'. Available: [...]"` |
 | Zero conversion factor (database error) | 422 | true | `"Conversion factor for unit 'X' in 'Y' is zero"` |
-| Negative / NaN / inf input | — | — | No error — clamped to 0.0, returns `{"result": 0.0}` |
+| Dimension mismatch (compound) | 422 | true | `"Incompatible dimensions: ..."` |
+| Unknown currency code | 404 | true | `"'X'"` |
+| Rate service unreachable | 503 | true | `"Upstream rate service unavailable: ..."` |
+| Negative / NaN / inf input | — | — | No error — clamped to 0.0 |
 
 On a 422 / `isError: true` response:
 - Check that magnitude name matches exactly (use `get_magnitudes` to confirm).
@@ -250,8 +304,8 @@ On a 422 / `isError: true` response:
 
 - **The GUI** (`unit-converter-gui`) — the PySide6 desktop application is a separate entry
   point and is not driven via the API.
-- **The database** (`unit_converter/data/magnitudes.toml`) — the agent reads the database
-  through `get_units`; it does not write to or reload the database.
+- **The database** (`unit_converter/data/magnitudes.toml`) — agents read units through
+  `get_units`; the shipped database is not writable via the API (use `POST /units/custom`
+  for runtime additions, or the `unit-converter-maintainer` agent for database edits).
 - **The packaging build** (`packaging/`) — the PyInstaller executable is a build artifact,
   not an agent-accessible surface.
-- **The legacy Tkinter entry point** (`UConverter_UI.pyw`) — not wired to the API layer.

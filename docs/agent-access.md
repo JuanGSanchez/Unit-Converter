@@ -2,8 +2,8 @@
 
 The unit converter exposes a single shared service (`unit_converter.api`) as both a
 **REST API** (FastAPI) and an **MCP server** (FastMCP 3.x) from one combined ASGI
-application. All conversion logic is delegated to `unit_converter.core.converter` —
-the API layer contains no conversion math.
+application. All conversion logic is delegated to `unit_converter.core` — the API layer
+contains no conversion math.
 
 ---
 
@@ -96,47 +96,85 @@ tools, same core.
 
 ## REST endpoints
 
+16 operations across 5 tag groups.
+
+### Meta
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Liveness check |
-| `GET` | `/magnitudes` | List all magnitude names |
-| `GET` | `/magnitudes/{magnitude}/units` | List units and base unit for a magnitude |
-| `POST` | `/convert` | Perform a unit conversion |
+| `GET` | `/health` | Liveness check; returns `{"status":"ok","version":"<ver>"}` |
 
-### GET /health
+### Discovery
 
-Returns application status and version.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/magnitudes` | Sorted list of all magnitude names |
+| `GET` | `/magnitudes/{magnitude}/units` | Units and base unit for a magnitude |
+
+### Conversion
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/convert` | Convert a value between units (supports `sig_figs`) |
+| `GET` | `/convert/compound/parse` | Parse a compound unit expression |
+| `POST` | `/convert/compound` | Convert a value using compound unit expressions |
+
+### Currency
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/currencies` | Sorted list of supported ISO 4217 currency codes |
+| `GET` | `/currencies/rate` | Exchange rate for a currency pair |
+| `POST` | `/currencies/convert` | Convert an amount between currencies |
+| `POST` | `/currencies/refresh` | Force-refresh the exchange rate cache from Frankfurter |
+
+### History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/history` | Full conversion history, most-recent-first |
+| `GET` | `/history/favorites` | Favorited entries only |
+| `POST` | `/history/record` | Append a conversion to history (HTTP 201) |
+| `POST` | `/history/favorites` | Mark a history entry as a favorite |
+| `DELETE` | `/history` | Clear all history |
+
+### Units
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/units/custom` | Add a custom unit to the user database (HTTP 201) |
+
+---
+
+### Route details
+
+#### GET /health
 
 ```json
 { "status": "ok", "version": "1.1.0" }
 ```
 
-### GET /magnitudes
-
-Returns a sorted list of magnitude names.
+#### GET /magnitudes
 
 ```json
 ["Area", "Data", "Energy", "Length", "Mass", "Power", "Pressure", "Time", "Volume"]
 ```
 
-### GET /magnitudes/{magnitude}/units
-
-Returns units and the base unit for a magnitude.
+#### GET /magnitudes/{magnitude}/units
 
 ```
 GET /magnitudes/Mass/units
 ```
 
 ```json
-{
-  "units": ["gram (g)", "Av. pound (lb)", "Av. ounce (oz)"],
-  "base_unit": "gram (g)"
-}
+{ "units": ["gram (g)", "Av. pound (lb)", "Av. ounce (oz)"], "base_unit": "gram (g)" }
 ```
 
-### POST /convert
+HTTP 422 if `magnitude` is unknown.
 
-Request body (JSON):
+#### POST /convert
+
+Request body:
 
 ```json
 {
@@ -145,7 +183,8 @@ Request body (JSON):
   "from_unit": "Av. pound (lb)",
   "to_unit": "gram (g)",
   "from_order": "1",
-  "to_order": "1"
+  "to_order": "1",
+  "sig_figs": null
 }
 ```
 
@@ -153,36 +192,176 @@ Request body (JSON):
 |-------|------|----------|---------|-------------|
 | `magnitude` | string | yes | — | Magnitude name (case-sensitive) |
 | `value` | number | yes | — | Value to convert |
-| `from_unit` | string | yes | — | Source unit name |
-| `to_unit` | string | yes | — | Target unit name |
-| `from_order` | string | no | `"1"` | SI/IEC prefix for source unit |
-| `to_order` | string | no | `"1"` | SI/IEC prefix for target unit |
+| `from_unit` | string | yes | — | Source unit name (exact, from `get_units`) |
+| `to_unit` | string | yes | — | Target unit name (exact, from `get_units`) |
+| `from_order` | string | no | `"1"` | SI/IEC prefix symbol for source unit |
+| `to_order` | string | no | `"1"` | SI/IEC prefix symbol for target unit |
+| `sig_figs` | integer | no | `null` | Round result to N significant figures |
 
-Response:
+Response: `{ "result": 453.6 }`
 
-```json
-{ "result": 453.6 }
+HTTP 422 on unknown magnitude, unit, incompatible units, or invalid order key.
+
+#### GET /convert/compound/parse
+
+```
+GET /convert/compound/parse?expr=km/h
 ```
 
-`from_order` and `to_order` accept the SI prefix symbol keys (e.g. `"k"` for kilo,
-`"M"` for mega) or `"1"` for no prefix. For the `Data` magnitude, IEC binary prefix
-symbols are used (same symbol set, different base: 1024).
+```json
+{ "expr": "km/h", "factor": 0.27778, "dimensions": { ... } }
+```
+
+HTTP 422 on syntax errors or unknown unit atoms.
+
+#### POST /convert/compound
+
+```json
+{ "value": 100, "from_expr": "km/h", "to_expr": "m/s" }
+```
+
+```json
+{ "result": 27.778, "from_expr": "km/h", "to_expr": "m/s" }
+```
+
+HTTP 422 on dimension mismatch, unknown unit atoms, or syntax errors.
+
+#### GET /currencies
+
+```json
+["AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", ...]
+```
+
+#### GET /currencies/rate
+
+```
+GET /currencies/rate?from=EUR&to=USD
+```
+
+```json
+{ "from": "EUR", "to": "USD", "rate": 1.082, "date": "2026-06-13", "is_stale": false }
+```
+
+`is_stale: true` when the cache is from a prior date. HTTP 404 if either code is unknown.
+
+#### POST /currencies/convert
+
+```json
+{ "from": "EUR", "to": "USD", "value": 100 }
+```
+
+```json
+{ "result": 108.2, "rate": 1.082, "date": "2026-06-13", "is_stale": false }
+```
+
+HTTP 404 if either currency code is unknown; HTTP 422 if `value` is invalid.
+
+#### POST /currencies/refresh
+
+```json
+{ "date": "2026-06-13", "base": "EUR", "currency_count": 33, "source": "frankfurter" }
+```
+
+HTTP 503 if the upstream Frankfurter API is unreachable.
+
+#### GET /history
+
+Returns a list of `HistoryEntry` objects (most-recent-first):
+
+```json
+[
+  {
+    "magnitude": "Mass",
+    "from_unit": "Av. pound (lb)",
+    "to_unit": "gram (g)",
+    "from_order": "1",
+    "to_order": "1",
+    "value": 1.0,
+    "result": 453.6,
+    "sig_figs": null,
+    "timestamp": "2026-06-13T10:00:00Z",
+    "favorite": false,
+    "favorite_label": ""
+  }
+]
+```
+
+#### GET /history/favorites
+
+Same schema as `GET /history`, filtered to `"favorite": true` entries only.
+
+#### POST /history/record
+
+```json
+{
+  "magnitude": "Mass",
+  "value": 1.0,
+  "from_unit": "Av. pound (lb)",
+  "to_unit": "gram (g)",
+  "result": 453.6,
+  "from_order": "1",
+  "to_order": "1",
+  "sig_figs": null
+}
+```
+
+Returns the created `HistoryEntry` (HTTP 201). HTTP 422 if required fields are missing.
+
+#### POST /history/favorites
+
+```json
+{ "timestamp": "2026-06-13T10:00:00Z", "label": "lb to g baseline" }
+```
+
+```json
+{ "marked": true, "timestamp": "2026-06-13T10:00:00Z" }
+```
+
+HTTP 422 if `timestamp` is empty or no matching entry is found.
+
+#### DELETE /history
+
+```json
+{ "cleared": true }
+```
+
+#### POST /units/custom
+
+```json
+{ "magnitude": "Mass", "unit_name": "stone (st)", "factor": 6350.29 }
+```
+
+```json
+{ "magnitude": "Mass", "unit_name": "stone (st)", "factor": 6350.29 }
+```
+
+Returns HTTP 201. HTTP 422 on validation failure (empty name, factor ≤ 0, invalid chars).
 
 ---
 
 ## MCP tools
 
-FastMCP auto-generates one MCP tool per FastAPI route. The four tools exposed are:
+FastMCP auto-generates one MCP tool per FastAPI route. The 16 tools exposed mirror the
+REST contract above exactly.
 
 | Tool name | Derived from | Description |
 |-----------|-------------|-------------|
 | `health` | `GET /health` | Liveness check and version |
 | `get_magnitudes` | `GET /magnitudes` | Sorted list of all magnitude names |
 | `get_units` | `GET /magnitudes/{magnitude}/units` | Units and base unit for a magnitude |
-| `post_convert` | `POST /convert` | Perform a unit conversion |
-
-Tool inputs and outputs mirror the REST contract above. `post_convert` is the primary
-tool for agent-driven conversions.
+| `post_convert` | `POST /convert` | Convert a value between units |
+| `get_parse_compound` | `GET /convert/compound/parse` | Parse a compound unit expression |
+| `post_convert_compound` | `POST /convert/compound` | Convert using compound unit expressions |
+| `list_currencies` | `GET /currencies` | List supported ISO 4217 currency codes |
+| `get_currency_rate` | `GET /currencies/rate` | Exchange rate for a currency pair |
+| `post_convert_currency` | `POST /currencies/convert` | Convert an amount between currencies |
+| `post_refresh_rates` | `POST /currencies/refresh` | Force-refresh the rate cache |
+| `get_history` | `GET /history` | Full conversion history |
+| `get_favorites` | `GET /history/favorites` | Favorited history entries |
+| `post_record_conversion` | `POST /history/record` | Append a conversion to history |
+| `post_add_favorite` | `POST /history/favorites` | Mark a history entry as a favorite |
+| `delete_history` | `DELETE /history` | Clear all history |
+| `post_add_custom_unit` | `POST /units/custom` | Add a custom unit |
 
 ---
 
@@ -203,17 +382,26 @@ curl -X POST http://localhost:8000/convert \
   -d '{"magnitude":"Mass","value":1.0,"from_unit":"Av. pound (lb)","to_unit":"gram (g)"}'
 # -> {"result":453.6}
 
-# Convert 1 km to meters (using SI prefix)
+# Convert with sig_figs
+curl -X POST http://localhost:8000/convert \
+  -H "Content-Type: application/json" \
+  -d '{"magnitude":"Mass","value":1.0,"from_unit":"Av. pound (lb)","to_unit":"gram (g)","sig_figs":3}'
+# -> {"result":454.0}
+
+# Convert 1 km to meters (SI prefix)
 curl -X POST http://localhost:8000/convert \
   -H "Content-Type: application/json" \
   -d '{"magnitude":"Length","value":1.0,"from_unit":"meter (m)","to_unit":"meter (m)","from_order":"k","to_order":"1"}'
 # -> {"result":1000.0}
 
-# Convert 1 GiB to bytes (Data magnitude — IEC binary prefix)
-curl -X POST http://localhost:8000/convert \
+# Compound conversion
+curl -X POST http://localhost:8000/convert/compound \
   -H "Content-Type: application/json" \
-  -d '{"magnitude":"Data","value":1.0,"from_unit":"byte (B)","to_unit":"byte (B)","from_order":"G","to_order":"1"}'
-# -> {"result":1073741824.0}
+  -d '{"value":100,"from_expr":"km/h","to_expr":"m/s"}'
+# -> {"result":27.778,"from_expr":"km/h","to_expr":"m/s"}
+
+# Currency rate
+curl "http://localhost:8000/currencies/rate?from=EUR&to=USD"
 ```
 
 ### REST — Python (httpx)
@@ -223,18 +411,15 @@ import httpx
 
 base = "http://localhost:8000"
 
-# List magnitudes
-resp = httpx.get(f"{base}/magnitudes")
-magnitudes = resp.json()  # ['Area', 'Data', ...]
-
 # Convert
 resp = httpx.post(f"{base}/convert", json={
     "magnitude": "Mass",
     "value": 1.0,
     "from_unit": "Av. pound (lb)",
     "to_unit": "gram (g)",
+    "sig_figs": 3,
 })
-print(resp.json()["result"])  # 453.6
+print(resp.json()["result"])  # 454.0
 ```
 
 ### REST — in-process (no server required, for tests)
@@ -261,11 +446,6 @@ from fastmcp import Client
 
 async def main():
     async with Client("http://localhost:8000/mcp") as client:
-        # List magnitudes
-        result = await client.call_tool("get_magnitudes", {})
-        print(result)
-
-        # Convert
         result = await client.call_tool("post_convert", {
             "magnitude": "Mass",
             "value": 1.0,
@@ -296,10 +476,10 @@ async def main():
 ## Architecture
 
 ```
-unit_converter.core.converter   <- pure core (no UI, no transport)
+unit_converter.core.*          <- pure core (no UI, no transport)
          |
          v
-unit_converter.api.service      <- thin typed wrappers (single shared layer)
+unit_converter.api.service     <- thin typed wrappers (single shared layer)
          |
     +----+------+
     v           v
@@ -320,15 +500,19 @@ routes and the MCP endpoint onto a single FastAPI app and forwards the MCP lifes
 
 ## Error handling
 
-Errors from the core (`ValueError` for unknown magnitude, unit, or order key) propagate
-through the FastAPI layer as **HTTP 422 Unprocessable Entity**:
+| Error condition | HTTP status | MCP `isError` | Detail pattern |
+|----------------|-------------|---------------|----------------|
+| Unknown magnitude | 422 | true | `"Unknown magnitude: 'X'. Available: [...]"` |
+| Unknown / incompatible unit | 422 | true | `"Unknown unit 'X' in magnitude 'Y'. Available: [...]"` |
+| Unknown order prefix | 422 | true | `"Unknown order prefix 'X' for magnitude 'Y'. Available: [...]"` |
+| Zero conversion factor | 422 | true | `"Conversion factor for unit 'X' in 'Y' is zero"` |
+| Dimension mismatch (compound) | 422 | true | `"Incompatible dimensions: ..."` |
+| Unknown currency code | 404 | true | `"'X'"` |
+| Upstream rate service down | 503 | true | `"Upstream rate service unavailable: ..."` |
+| Negative / NaN / inf input | — | — | No error — clamped to 0.0, returns `{"result": 0.0}` |
 
-```json
-{ "detail": "Unknown magnitude: 'Foo'.  Available: ['Area', 'Data', ...]" }
-```
-
-Over MCP, the same error is returned as a structured tool error (`isError: true`) with
-the `detail` field from the HTTP 422 body.
-
-Input clamping (negative, NaN, infinite values → `0.0`) is performed by the core before
-any error check, so clamped inputs always succeed and return `0.0`.
+On a 422 / `isError: true` response:
+- Verify the magnitude name exactly against `GET /magnitudes`.
+- Verify unit names exactly against `GET /magnitudes/{magnitude}/units`.
+- Verify `from_order` / `to_order` are valid prefix symbols for the magnitude's prefix table.
+- For currency errors, verify the code against `GET /currencies`.

@@ -3,7 +3,7 @@ unit_converter.gui.main_window
 ================================
 PySide6 main window for the U Converter application.
 
-Preserves the UX of the original Tkinter ``UC_UI`` class:
+Features:
 - Fixed 235 x 385 px window, centered on screen, non-resizable.
 - Custom window icon from ``Logo UC.png``.
 - Magnitude selector (QComboBox), two unit selectors with SI/IEC order
@@ -15,41 +15,33 @@ Preserves the UX of the original Tkinter ``UC_UI`` class:
 - Digit-sweep control: scroll wheel on the sweep label adjusts the decimal
   position used by the Up/Down arrow increment; click resets to "...".
 - Arrow-key (Up/Down) and mouse-wheel nudge of the numeric entry value.
-- Hover tooltips (QToolTip) replacing the manual Toplevel popup.
+- Hover tooltips (QToolTip) for every widget that carries user-visible info.
 - Right-click context menu: About and Exit.
-- Ctrl+Right exits the application (preserving the original <Control_R> binding).
+- Ctrl+Q exits the application.
 - Return/Enter triggers conversion.
 - All conversion math delegated to ``unit_converter.core.converter``.
-- No ``del locals()`` / ``gc.collect()`` / ``del self`` cargo-cult exit — uses
-  standard Qt ``QApplication.quit()``.
+- Conversion history panel (UC-I07): recent conversions persist across sessions.
+- Custom-unit dialog: add user-defined units persisted to ~/.unit-converter/custom.toml.
 
 Implementation notes
 --------------------
-- The window is NOT frameless.  The original Tkinter window retained the OS
-  title-bar (only the tooltip Toplevel was frameless/overrideredirect).
-  Reproducing the title-bar-less look would require platform-specific drag
-  handling and is not part of the original UX; omitted intentionally.
-- The tooltip popup (fr_man Toplevel) is replaced by Qt native QToolTip — the
-  tooltip is displayed automatically by Qt on hover; no manual geometry
-  calculation is needed.
-- The Tk ``<Control_R>`` binding maps to ``Qt.Key_Control`` + right modifier.
-  In Qt this is more reliably handled as a ``QShortcut`` on
-  ``QKeySequence(Qt.CTRL | Qt.Key_Control)`` — but since that only fires on the
-  right control key we capture ``keyPressEvent`` and check
-  ``event.key() == Qt.Key_Control and event.nativeScanCode()`` instead.
-  Simplified: we bind ``Ctrl+Q`` (a universally expected quit shortcut) AND
-  retain an explicit check for the right-Ctrl scan code on Windows (scan 0x1D
-  is left Ctrl; 0x11D / extended bit is right Ctrl — but nativeScanCode is
-  unreliable cross-platform). The simplest compatible solution is a ``QShortcut``
-  on ``Meta+Control`` (which is right-Ctrl on Windows via Qt), documented below.
+- The window is NOT frameless; the OS title-bar is preserved as expected.
+- Hover tooltips use Qt native QToolTip (``setToolTip``) — displayed
+  automatically on hover, no manual geometry calculation needed.
+- Ctrl+Q is the quit shortcut (universally expected in Qt apps).
+- No ``del locals()`` / ``gc.collect()`` / ``del self`` cargo-cult exit — uses
+  standard Qt ``QApplication.quit()``.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 
 from PySide6.QtCore import Qt
+
+logger = logging.getLogger(__name__)
 from PySide6.QtGui import (
     QDoubleValidator,
     QIcon,
@@ -58,9 +50,14 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QMessageBox,
     QShortcut,
@@ -69,7 +66,14 @@ from PySide6.QtWidgets import (
 )
 
 from unit_converter.core import converter as _core
-from unit_converter.core.data_loader import MagnitudeDataError
+from unit_converter.core.data_loader import MagnitudeDataError, add_custom_unit
+from unit_converter.core.history import (
+    HistoryEntry,
+    add_favorite,
+    list_favorites,
+    load_history,
+    record as _record_history,
+)
 from unit_converter.gui.resources import logo_path
 
 
@@ -307,16 +311,145 @@ class _NumEntry(QLineEdit):
 
 
 # ---------------------------------------------------------------------------
+# History dialog (UC-I07)
+# ---------------------------------------------------------------------------
+
+class _HistoryDialog(QDialog):
+    """
+    Non-modal dialog listing recent conversions and favorites.
+
+    Selecting an entry and clicking "Re-run" emits it back to the main window
+    via the ``rerun_entry`` signal (the parent connects to ``_apply_history``).
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Conversion History")
+        self.resize(420, 340)
+        self.setToolTip("Recent conversions and saved favorites.")
+        self._selected_entry: HistoryEntry | None = None
+
+        layout = QVBoxLayout(self)
+
+        self._list = QListWidget()
+        self._list.setToolTip("Recent conversions — double-click to re-run.")
+        layout.addWidget(self._list)
+
+        buttons = QDialogButtonBox()
+        self._btn_rerun = buttons.addButton("Re-run", QDialogButtonBox.ActionRole)
+        self._btn_fav = buttons.addButton("Favorite", QDialogButtonBox.ActionRole)
+        buttons.addButton(QDialogButtonBox.Close)
+        layout.addWidget(buttons)
+
+        self._btn_rerun.setToolTip("Re-populate the converter with this entry.")
+        self._btn_fav.setToolTip("Mark this entry as a favorite.")
+
+        self._btn_rerun.clicked.connect(self._on_rerun)
+        self._btn_fav.clicked.connect(self._on_favorite)
+        buttons.rejected.connect(self.close)
+
+        self._entries: list[HistoryEntry] = []
+        self._refresh()
+
+    def _refresh(self) -> None:
+        self._list.clear()
+        self._entries = load_history()
+        for e in self._entries:
+            star = "* " if e.favorite else ""
+            label = (
+                f"{star}{e.magnitude}: {e.value} {e.from_unit} -> "
+                f"{e.result:.6g} {e.to_unit}  [{e.timestamp[:10]}]"
+            )
+            self._list.addItem(QListWidgetItem(label))
+
+    def _on_rerun(self) -> None:
+        idx = self._list.currentRow()
+        if 0 <= idx < len(self._entries):
+            self._selected_entry = self._entries[idx]
+            self.accept()
+
+    def _on_favorite(self) -> None:
+        idx = self._list.currentRow()
+        if 0 <= idx < len(self._entries):
+            add_favorite(self._entries[idx], label="")
+            self._refresh()
+
+    def selected_entry(self) -> HistoryEntry | None:
+        return self._selected_entry
+
+
+# ---------------------------------------------------------------------------
+# Custom-unit dialog (UC-I03 GUI integration)
+# ---------------------------------------------------------------------------
+
+class _AddUnitDialog(QDialog):
+    """Simple dialog for adding a custom unit."""
+
+    def __init__(self, magnitude_names: list[str], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Add Custom Unit")
+        self.resize(300, 180)
+        self.setToolTip("Add a custom unit to an existing magnitude.")
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._cb_magnitude = QComboBox()
+        self._cb_magnitude.addItems(magnitude_names)
+        self._cb_magnitude.setToolTip("The magnitude to extend.")
+        form.addRow("Magnitude:", self._cb_magnitude)
+
+        self._ed_name = QLineEdit()
+        self._ed_name.setPlaceholderText("e.g. stone (st)")
+        self._ed_name.setToolTip("Name for the new unit.")
+        form.addRow("Unit name:", self._ed_name)
+
+        self._ed_factor = QLineEdit()
+        self._ed_factor.setPlaceholderText("e.g. 6350.29")
+        self._ed_factor.setToolTip(
+            "Conversion factor relative to the magnitude's base unit.\n"
+            "Must be a positive, non-zero finite number."
+        )
+        form.addRow("Factor:", self._ed_factor)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_accept(self) -> None:
+        mag = self._cb_magnitude.currentText()
+        name = self._ed_name.text().strip()
+        factor_text = self._ed_factor.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Validation", "Unit name must not be empty.")
+            return
+        try:
+            factor = float(factor_text)
+        except ValueError:
+            QMessageBox.warning(self, "Validation", "Factor must be a number.")
+            return
+        try:
+            add_custom_unit(mag, name, factor)
+        except Exception as exc:
+            QMessageBox.warning(self, "Validation", str(exc))
+            return
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
 class MainWindow(QWidget):
     """
-    PySide6 recreation of the original Tkinter ``UC_UI`` window.
+    PySide6 main window for U Converter.
 
     Fixed 235 x 385 px, centered, non-resizable.  Wired entirely to the pure
     ``unit_converter.core.converter`` API — no conversion math is implemented
-    here.
+    here.  Integrates history (UC-I07) and custom units (UC-I03).
     """
 
     def __init__(self) -> None:
@@ -558,13 +691,61 @@ class MainWindow(QWidget):
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
+        history_action = menu.addAction("History / Favorites...")
+        add_unit_action = menu.addAction("Add Custom Unit...")
+        menu.addSeparator()
         about_action = menu.addAction("About...")
         exit_action = menu.addAction("Exit")
         action = menu.exec(event.globalPos())
-        if action == about_action:
+        if action == history_action:
+            self._show_history()
+        elif action == add_unit_action:
+            self._show_add_unit()
+        elif action == about_action:
             self._show_about()
         elif action == exit_action:
             self._exit()
+
+    def _show_history(self) -> None:
+        """Open the history/favorites dialog (UC-I07)."""
+        dlg = _HistoryDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            entry = dlg.selected_entry()
+            if entry is not None:
+                self._apply_history_entry(entry)
+
+    def _apply_history_entry(self, entry: HistoryEntry) -> None:
+        """Re-populate the converter inputs from a history entry."""
+        magnitude = entry.magnitude
+        if magnitude not in self._magnitude_names:
+            return
+        idx = self._cb_magnitude.findText(magnitude)
+        if idx >= 0:
+            self._cb_magnitude.setCurrentIndex(idx)
+        # Set units
+        idx1 = self._cb_unit1.findText(entry.from_unit)
+        if idx1 >= 0:
+            self._cb_unit1.setCurrentIndex(idx1)
+        idx2 = self._cb_unit2.findText(entry.to_unit)
+        if idx2 >= 0:
+            self._cb_unit2.setCurrentIndex(idx2)
+        # Set value
+        self._entry1.setText(str(entry.value))
+        self._unit_converter(1)
+
+    def _show_add_unit(self) -> None:
+        """Open the add-custom-unit dialog (UC-I03 GUI)."""
+        mag_names = [m for m in self._magnitude_names if m != "*Select magnitude*"]
+        dlg = _AddUnitDialog(mag_names, self)
+        if dlg.exec() == QDialog.Accepted:
+            # Reload the database so the new unit appears
+            _core.reload_database()
+            QMessageBox.information(
+                self,
+                "Custom Unit Added",
+                "Custom unit added successfully.\n"
+                "Please re-select the magnitude to see the new unit.",
+            )
 
     def _show_about(self) -> None:
         QMessageBox.information(
@@ -689,8 +870,16 @@ class MainWindow(QWidget):
                     from_order=order_from,
                     to_order=order_to,
                 )
-            except (ValueError, ZeroDivisionError):
-                result = 0.0
+            except ValueError as exc:
+                logger.error(
+                    "Conversion error (slot 1): magnitude=%r from=%r to=%r: %s",
+                    magnitude,
+                    self._cb_unit1.currentText(),
+                    self._cb_unit2.currentText(),
+                    exc,
+                )
+                self._lab_val2.setText("error")
+                return
 
             self._val2 = result
             self._val2_old = result
@@ -701,6 +890,20 @@ class MainWindow(QWidget):
 
             order_exp2 = order_table.get(order_to, 0)
             self._lab_val2.setText("{:.1e}".format(result * base ** order_exp2))
+
+            # Record to history (UC-I07) — silently ignore errors so history
+            # never disrupts conversion.
+            try:
+                _record_history(
+                    magnitude, v1,
+                    self._cb_unit1.currentText(),
+                    self._cb_unit2.currentText(),
+                    result,
+                    from_order=order_from,
+                    to_order=order_to,
+                )
+            except Exception:
+                pass
 
         elif v2 != self._val2_old or slot == 2:
             # Clamp
@@ -722,8 +925,16 @@ class MainWindow(QWidget):
                     from_order=order_to,
                     to_order=order_from,
                 )
-            except (ValueError, ZeroDivisionError):
-                result = 0.0
+            except ValueError as exc:
+                logger.error(
+                    "Conversion error (slot 2): magnitude=%r from=%r to=%r: %s",
+                    magnitude,
+                    self._cb_unit2.currentText(),
+                    self._cb_unit1.currentText(),
+                    exc,
+                )
+                self._lab_val1.setText("error")
+                return
 
             self._val1 = result
             self._val1_old = result

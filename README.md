@@ -1,8 +1,9 @@
 # Unit-Converter
 
 A multi-magnitude unit converter for **Area, Data, Energy, Length, Mass, Power, Pressure, Time,
-and Volume**. The project is structured around a pure Python core with no third-party runtime
-dependencies, and optional front-ends for GUI interaction, REST API access, and MCP agent access.
+and Volume**, plus **live currency conversion** via the Frankfurter API. Structured around a pure
+Python core with no third-party runtime dependencies, and optional front-ends for GUI interaction,
+REST API access, and MCP agent access.
 
 ---
 
@@ -10,12 +11,15 @@ dependencies, and optional front-ends for GUI interaction, REST API access, and 
 
 ```
 unit_converter.core.converter   <- pure conversion logic (no UI, no transport)
-unit_converter.core.data_loader <- validated TOML/legacy-TXT database loader
+unit_converter.core.data_loader <- validated TOML database loader
+unit_converter.core.rates       <- Frankfurter currency rate cache
+unit_converter.core.history     <- conversion history + favorites persistence
+unit_converter.core.expr        <- compound/derived unit expression parser
          |
-    +----|----------+-------------------+
-    v               v                   v
-unit_converter.   unit_converter.     UConverter_UI.pyw
-gui.app           api.main            (legacy Tkinter entry, retained)
+    +----|----------+
+    v               v
+unit_converter.   unit_converter.
+gui.app           api.main
 (PySide6 GUI)     (REST + MCP server)
 ```
 
@@ -30,8 +34,19 @@ delegate every computation to it.
 - **Build/CI ceiling: Python 3.13** (FastMCP 3.4.x declares support through 3.13; the rest
   of the stack supports 3.14). CPython 3.14 installs but is not yet in FastMCP's declared
   classifiers.
-- The legacy Tkinter entry point (`UConverter_UI.pyw`) is retained for backward compatibility
-  and runs on any Python >= 3.11 with Tkinter available (stdlib).
+
+---
+
+## Features
+
+- **Significant-figures / precision control** — pass `sig_figs` to round results to N significant figures.
+- **Dimensional-compatibility guard** — converting incompatible units raises `IncompatibleUnitsError` (HTTP 422).
+- **Affine / temperature handling** — offset + scale units (e.g. °C ↔ °F ↔ K) convert correctly via the affine path.
+- **Live currency conversion** — Frankfurter API with a dated cached table and offline fallback.
+- **Compound / derived units** — parse and convert expressions such as `km/h → m/s`.
+- **Custom user-defined units** — add units at runtime via the API or GUI; persisted to `~/.unit-converter/custom.toml`.
+- **Conversion history + favorites** — recent conversions persist across sessions; entries can be favorited and labeled.
+- **PySide6 GUI with hover tooltips** — every widget carries a `QToolTip` description.
 
 ---
 
@@ -53,7 +68,7 @@ Installs the pure conversion core. No third-party runtime dependencies.
 pip install "unit-converter[gui]"
 ```
 
-Adds `PySide6~=6.11.1`. Requires Python 3.10–3.14.
+Adds `PySide6~=6.11.1`.
 
 ### REST + MCP API server
 
@@ -89,13 +104,14 @@ pip install -e ".[gui,api,dev]"
 
 ## Running
 
-### PySide6 GUI (primary entry point)
+### PySide6 GUI
 
 ```bash
 unit-converter-gui
 ```
 
 Launches the PySide6 desktop application. Requires the `[gui]` optional group.
+Equivalent invocation from source: `python -m unit_converter.gui.app`.
 
 ### REST + MCP server (Streamable HTTP)
 
@@ -111,6 +127,9 @@ Requires the `[api]` optional group.
 | REST (Swagger UI) | http://localhost:8000/docs |
 | REST (ReDoc) | http://localhost:8000/redoc |
 | MCP (Streamable HTTP) | http://localhost:8000/mcp |
+| Health check | http://localhost:8000/health |
+
+Equivalent invocation: `uvicorn unit_converter.api.main:app --host 0.0.0.0 --port 8000`
 
 ### MCP server over stdio (for CLI / local agent clients)
 
@@ -120,17 +139,7 @@ unit-converter-mcp
 
 Runs the MCP server over stdio. Suitable for Claude Desktop and other MCP-aware CLI tools.
 Requires the `[api]` optional group.
-
-### Legacy Tkinter entry point
-
-```bash
-unit-converter
-# or directly:
-python UConverter_UI.pyw
-```
-
-The original Tkinter UI is retained for backward compatibility. It is no longer the primary
-entry point and may be removed in a future release.
+Equivalent invocation: `python -m unit_converter.api.mcp_server`
 
 ---
 
@@ -143,7 +152,7 @@ pytest --cov=unit_converter --cov-report=term-missing
 ```
 
 The coverage gate is **>= 90% line coverage on `unit_converter/core/`**. GUI and API transport
-layers are excluded from the gate. Measured coverage: 91%.
+layers are excluded from the gate.
 
 ---
 
@@ -155,33 +164,38 @@ A PyInstaller spec is provided in `packaging/`. See
 Quick start on Windows:
 
 ```bat
-pip install "pyinstaller~=6.20.0" "PySide6~=6.11.1"
+pip install "pyinstaller~=6.20.0" "PySide6~=6.11.1" Pillow
 packaging\build_windows.bat
 ```
 
 Output: `packaging\bin\UConverter\UConverter.exe` — a self-contained windowed executable
-that bundles the TOML database and the PySide6 Qt libraries. No Python installation is
-required to run it.
+that bundles the TOML database and PySide6 Qt libraries. No Python installation required.
 
-Note: the spec file is committed; the built executable is not — run the build scripts
-locally or in CI to produce it.
+On Linux/macOS:
+
+```bash
+pip install "pyinstaller~=6.20.0" "PySide6~=6.11.1" Pillow
+bash packaging/build_posix.sh
+```
+
+Or use the cross-platform Python runner: `python packaging/build.py`
 
 ---
 
 ## Extending units
 
-The unit database lives in `unit_converter/data/magnitudes.toml` (TOML format, primary) with
-`unit_converter/data/Magnitudes.txt` retained as a legacy fallback. See
-[docs/usage-guide.md](docs/usage-guide.md#extending-the-unit-database) for the data format
-and how to add new magnitudes and units.
+The unit database lives in `unit_converter/data/magnitudes.toml`. See
+[docs/usage-guide.md](docs/usage-guide.md#extending-the-unit-database) for the TOML format
+and how to add new magnitudes and units. Custom user units can also be added at runtime via
+`POST /units/custom` or the GUI without editing the shipped database.
 
 ---
 
 ## Agent / programmatic access
 
-See [docs/agent-access.md](docs/agent-access.md) for the REST endpoints, MCP tools, transport
-options, and example calls. An in-repo Claude agent operating guide is at
-[docs/agent-operating-doc.md](docs/agent-operating-doc.md).
+See [docs/agent-access.md](docs/agent-access.md) for the full REST endpoint and MCP tool
+reference (16 operations), transport options, and example calls. The in-repo Claude agent
+operating guide is at [docs/agent-operating-doc.md](docs/agent-operating-doc.md).
 
 ---
 

@@ -18,6 +18,18 @@
 #   - Unit names may include Unicode superscripts (e.g. "m²") — no special escaping needed.
 #
 # Read by: unit_converter.core.data_loader._load_toml  (Python tomllib, stdlib >=3.11)
+#
+# Legacy-to-canonical unit name mapping (UC-B09)
+# ----------------------------------------------
+# The original Magnitudes.txt used different spellings for some units.
+# The TOML names below are canonical; use these when calling the API or GUI:
+#
+#   Legacy name            -> Canonical name (this file)
+#   "jule (J)"             -> "joule (J)"        (Energy)
+#   "electronvolt (Ev)"    -> "electronvolt (eV)" (Energy)
+#
+# If you load the legacy Magnitudes.txt file directly, unit names may differ.
+# The TOML loader (this file) is the source of truth for all supported names.
 
 [Mass]
 base_unit = "gram (g)"
@@ -102,3 +114,48 @@ base_unit = "bit (b)"
 [Data.units]
 "bit (b)"  = 1.0
 "byte (B)" = 8.0
+
+# ---------------------------------------------------------------------------
+# Temperature (UC-I04) — affine/offset magnitude
+# ---------------------------------------------------------------------------
+# Base unit: kelvin (K), factor=1, offset=0.
+# Convention: [factor, offset] means T_kelvin = T_unit * factor + offset.
+#
+# Derived from:
+#   °C: T_K = T_C + 273.15           → factor=1,      offset=273.15
+#   °F: T_K = (T_F - 32)*(5/9)+273.15 = T_F*(5/9)+255.3722...
+#             → factor=5/9≈0.5556,   offset=255.37222...
+#   °R: T_K = T_R*(5/9)              → factor=5/9,    offset=0
+#
+# The optional [Temperature.offsets] table stores the per-unit additive offset
+# (the base-unit value at 0 of this unit).  Units without an offsets entry are
+# treated as pure multiplicative (offset=0).
+#
+# Temperature INCREMENTS (ΔT) do not use offsets — add a separate magnitude
+# "Temperature_delta" that uses scale-only factors if needed.
+
+[Temperature]
+base_unit = "kelvin (K)"
+
+[Temperature.units]
+"kelvin (K)"     = 1.0
+"celsius (°C)"   = 1.0
+"fahrenheit (°F)" = 0.5555555555555556
+"rankine (°R)"   = 0.5555555555555556
+
+[Temperature.offsets]
+# offsets: value in Kelvin corresponding to 0 in each unit
+"kelvin (K)"     = 0.0
+"celsius (°C)"   = 273.15
+"fahrenheit (°F)" = 255.37222222222223
+"rankine (°R)"   = 0.0
+
+# Temperature increments (ΔT, scale-only — no offset applied)
+[Temperature_delta]
+base_unit = "kelvin (K)"
+
+[Temperature_delta.units]
+"kelvin (K)"     = 1.0
+"celsius (°C)"   = 1.0
+"fahrenheit (°F)" = 0.5555555555555556
+"rankine (°R)"   = 0.5555555555555556

@@ -39,6 +39,9 @@ packaging/bin/
 packaging/work/
 coverage-report/
 
+# Legacy Tkinter UI file (superseded by the PySide6 GUI in unit_converter/gui/):
+UConverter_UI.pyw
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

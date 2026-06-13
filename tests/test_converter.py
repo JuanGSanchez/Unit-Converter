@@ -24,6 +24,7 @@ import unit_converter.core.converter as conv
 from unit_converter.core.converter import (
     DICT_ORDER_IEC,
     DICT_ORDER_SI,
+    IncompatibleUnitsError,
     convert,
     list_magnitudes,
     list_units,
@@ -476,3 +477,109 @@ class TestReloadDatabase:
         reload_database(str(toml_dir))
         mags_second = list_magnitudes()
         assert mags_first == mags_second
+
+
+# ---------------------------------------------------------------------------
+# UC-I01 — significant-figures rounding
+# ---------------------------------------------------------------------------
+
+class TestSigFigs:
+    def test_sig_figs_3_pound_to_gram(self):
+        result = convert("Mass", 1.0, "Av. pound (lb)", "gram (g)", sig_figs=3)
+        assert result == pytest.approx(454.0, rel=1e-9)
+
+    def test_sig_figs_1(self):
+        result = convert("Mass", 123.456, "gram (g)", "gram (g)", sig_figs=1)
+        assert result == pytest.approx(100.0, rel=1e-9)
+
+    def test_sig_figs_none_preserves_precision(self):
+        r1 = convert("Mass", 1.0, "Av. pound (lb)", "gram (g)")
+        r2 = convert("Mass", 1.0, "Av. pound (lb)", "gram (g)", sig_figs=None)
+        assert r1 == r2
+
+    def test_sig_figs_zero_raises(self):
+        with pytest.raises(ValueError, match="sig_figs"):
+            convert("Mass", 1.0, "gram (g)", "gram (g)", sig_figs=0)
+
+    def test_sig_figs_negative_raises(self):
+        with pytest.raises(ValueError, match="sig_figs"):
+            convert("Mass", 1.0, "gram (g)", "gram (g)", sig_figs=-1)
+
+    def test_sig_figs_float_raises(self):
+        with pytest.raises(ValueError, match="sig_figs"):
+            convert("Mass", 1.0, "gram (g)", "gram (g)", sig_figs=2.5)
+
+    def test_sig_figs_zero_value_returns_zero(self):
+        assert convert("Mass", 0.0, "gram (g)", "gram (g)", sig_figs=3) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# UC-I02 — IncompatibleUnitsError / dimensional guard
+# ---------------------------------------------------------------------------
+
+class TestIncompatibleUnitsError:
+    def test_incompatible_units_error_is_value_error(self):
+        assert issubclass(IncompatibleUnitsError, ValueError)
+
+    def test_unknown_from_unit_raises_incompatible(self):
+        with pytest.raises(IncompatibleUnitsError, match="Unknown unit"):
+            convert("Mass", 1.0, "meter (m)", "gram (g)")
+
+    def test_unknown_to_unit_raises_incompatible(self):
+        with pytest.raises(IncompatibleUnitsError, match="Unknown unit"):
+            convert("Mass", 1.0, "gram (g)", "meter (m)")
+
+    def test_valid_same_magnitude_not_raised(self):
+        result = convert("Mass", 1.0, "gram (g)", "Av. pound (lb)")
+        assert result > 0.0
+
+
+# ---------------------------------------------------------------------------
+# UC-I04 — Temperature affine conversions
+# ---------------------------------------------------------------------------
+
+class TestTemperatureAffine:
+    def test_celsius_to_fahrenheit_freezing(self):
+        # 0°C -> 32°F
+        result = convert("Temperature", 0.0, "celsius (°C)", "fahrenheit (°F)")
+        assert result == pytest.approx(32.0, abs=1e-6)
+
+    def test_celsius_to_fahrenheit_boiling(self):
+        # 100°C -> 212°F
+        result = convert("Temperature", 100.0, "celsius (°C)", "fahrenheit (°F)")
+        assert result == pytest.approx(212.0, abs=1e-4)
+
+    def test_celsius_to_kelvin_freezing(self):
+        # 0°C -> 273.15 K
+        result = convert("Temperature", 0.0, "celsius (°C)", "kelvin (K)")
+        assert result == pytest.approx(273.15, abs=1e-6)
+
+    def test_kelvin_to_celsius_roundtrip(self):
+        k = convert("Temperature", 100.0, "celsius (°C)", "kelvin (K)")
+        c = convert("Temperature", k, "kelvin (K)", "celsius (°C)")
+        assert c == pytest.approx(100.0, abs=1e-6)
+
+    def test_fahrenheit_to_celsius_freezing(self):
+        # 32°F -> 0°C
+        result = convert("Temperature", 32.0, "fahrenheit (°F)", "celsius (°C)")
+        assert result == pytest.approx(0.0, abs=1e-4)
+
+    def test_temperature_exists_in_magnitudes(self):
+        mags = list_magnitudes()
+        assert "Temperature" in mags
+
+    def test_temperature_units_listed(self):
+        units = list_units("Temperature")["units"]
+        assert "kelvin (K)" in units
+        assert "celsius (°C)" in units
+        assert "fahrenheit (°F)" in units
+
+    def test_temperature_delta_scale_only(self):
+        # ΔT: 1°C increment = 1 K increment (scale only, no offset)
+        result = convert("Temperature_delta", 1.0, "celsius (°C)", "kelvin (K)")
+        assert result == pytest.approx(1.0, abs=1e-9)
+
+    def test_existing_magnitude_regression(self):
+        # Existing magnitudes must be unaffected by the affine path
+        assert convert("Mass", 1.0, "gram (g)", "gram (g)") == pytest.approx(1.0)
+        assert convert("Length", 1.0, "meter (m)", "meter (m)") == pytest.approx(1.0)

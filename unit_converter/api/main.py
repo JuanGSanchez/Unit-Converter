@@ -82,10 +82,19 @@ for route in _rest_app.routes:
 # Console-script entry point (unit-converter-api)
 # ---------------------------------------------------------------------------
 
-def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:  # pragma: no cover
+def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:  # pragma: no cover
     """Start the uvicorn server.
 
     Invoked by the ``unit-converter-api`` console script.
+
+    Parameters
+    ----------
+    host:
+        Interface to bind.  Defaults to ``127.0.0.1`` (loopback only —
+        appropriate for a single-user local tool).  Pass ``"0.0.0.0"`` to
+        expose to all network interfaces, e.g. for LAN access.
+    port:
+        TCP port.  Default ``8000``.
     """
     uvicorn.run(app, host=host, port=port)
 

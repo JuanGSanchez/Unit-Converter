@@ -26,6 +26,8 @@ from unit_converter.core.data_loader import (
     MagnitudeDataError,
     _apply_superscripts,
     _validate_factor,
+    add_custom_unit,
+    load_custom_units,
     load_magnitudes,
 )
 
@@ -344,9 +346,22 @@ class TestApplySuperscripts:
         # A unit name that ends with "3" directly (no parens)
         assert _apply_superscripts("unit3") == "unit³"
 
-    def test_digit_1_not_in_superscript_map(self):
-        """'1' is not in _SUPERSCRIPT_MAP so stays literal."""
-        assert _apply_superscripts("unit1") == "unit1"
+    def test_digit_1_trailing_becomes_superscript(self):
+        """'1' is in _SUPERSCRIPT_MAP; trailing '1' after a letter becomes ¹."""
+        assert _apply_superscripts("unit1") == "unit¹"
+
+    # UC-B05: extended exponent cases
+    def test_m4_becomes_superscript_4(self):
+        """Trailing '4' — any digit, not just 2/3."""
+        assert _apply_superscripts("meter (m4)") == "meter (m⁴)"
+
+    def test_m22_becomes_double_superscript(self):
+        """Multi-digit trailing run: '22' -> '²²'."""
+        assert _apply_superscripts("meter (m22)") == "meter (m²²)"
+
+    def test_h2o_interior_digit_unchanged(self):
+        """Interior digit not at the trailing position stays literal."""
+        assert _apply_superscripts("H2O") == "H2O"
 
 
 # ---------------------------------------------------------------------------
@@ -382,3 +397,72 @@ class TestValidateFactor:
 
     def test_very_large_positive_valid(self):
         _validate_factor("Mag", "unit", 1e300, Path("fake.toml"))
+
+
+# ---------------------------------------------------------------------------
+# UC-I03 — Custom user units (persistence + merge)
+# ---------------------------------------------------------------------------
+
+class TestCustomUnits:
+    def test_load_custom_units_empty_when_missing(self, tmp_path):
+        custom_path = tmp_path / "custom.toml"
+        result = load_custom_units(custom_path)
+        assert result == {}
+
+    def test_add_and_load_custom_unit(self, tmp_path):
+        custom_path = tmp_path / "custom.toml"
+        add_custom_unit("Mass", "stone (st)", 6350.29, custom_path=custom_path)
+        loaded = load_custom_units(custom_path)
+        assert "Mass" in loaded
+        assert "stone (st)" in loaded["Mass"]
+        assert loaded["Mass"]["stone (st)"] == pytest.approx(6350.29)
+
+    def test_add_custom_unit_invalid_factor_raises(self, tmp_path):
+        custom_path = tmp_path / "custom.toml"
+        with pytest.raises(MagnitudeDataError):
+            add_custom_unit("Mass", "bad_unit", 0.0, custom_path=custom_path)
+
+    def test_add_custom_unit_empty_name_raises(self, tmp_path):
+        custom_path = tmp_path / "custom.toml"
+        with pytest.raises(ValueError, match="non-empty"):
+            add_custom_unit("Mass", "", 1.0, custom_path=custom_path)
+
+    def test_custom_unit_merges_into_db(self, tmp_path):
+        """Custom unit appears in load_magnitudes() result."""
+        toml_dir = tmp_path / "data"
+        toml_dir.mkdir()
+        (toml_dir / "magnitudes.toml").write_text(textwrap.dedent("""\
+            [Mass]
+            base_unit = "gram (g)"
+            [Mass.units]
+            "gram (g)" = 1.0
+            "kg" = 1000.0
+            """), encoding="utf-8")
+        custom_path = tmp_path / "custom.toml"
+        add_custom_unit("Mass", "stone (st)", 6350.29, custom_path=custom_path)
+        db = load_magnitudes(toml_dir, custom_path=custom_path)
+        assert "stone (st)" in db["Mass"]
+
+    def test_custom_unit_cannot_override_shipped(self, tmp_path):
+        """Shipped unit names are authoritative; custom cannot redefine them."""
+        toml_dir = tmp_path / "data"
+        toml_dir.mkdir()
+        (toml_dir / "magnitudes.toml").write_text(textwrap.dedent("""\
+            [Mass]
+            base_unit = "gram (g)"
+            [Mass.units]
+            "gram (g)" = 1.0
+            """), encoding="utf-8")
+        custom_path = tmp_path / "custom.toml"
+        add_custom_unit("Mass", "gram (g)", 999.0, custom_path=custom_path)
+        db = load_magnitudes(toml_dir, custom_path=custom_path)
+        # Shipped factor (1.0) must win
+        assert db["Mass"]["gram (g)"] == 1.0
+
+    def test_custom_unit_idempotent(self, tmp_path):
+        """Adding the same unit twice does not duplicate it."""
+        custom_path = tmp_path / "custom.toml"
+        add_custom_unit("Mass", "stone (st)", 6350.29, custom_path=custom_path)
+        add_custom_unit("Mass", "stone (st)", 6350.29, custom_path=custom_path)
+        loaded = load_custom_units(custom_path)
+        assert list(loaded["Mass"].keys()).count("stone (st)") == 1

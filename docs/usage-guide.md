@@ -1,6 +1,7 @@
 # Unit-Converter — Usage Guide
 
-This guide covers the PySide6 GUI, the conversion model, and how to extend the unit database.
+This guide covers the PySide6 GUI, the conversion model, currency conversion, compound
+units, history and favorites, custom units, and how to extend the unit database.
 
 ---
 
@@ -8,10 +9,16 @@ This guide covers the PySide6 GUI, the conversion model, and how to extend the u
 
 1. [Using the PySide6 GUI](#using-the-pyside6-gui)
 2. [Conversion model](#conversion-model)
-3. [Order-of-magnitude prefixes](#order-of-magnitude-prefixes)
-4. [Supported magnitudes](#supported-magnitudes)
-5. [Extending the unit database](#extending-the-unit-database)
-6. [Legacy Tkinter entry point](#legacy-tkinter-entry-point)
+3. [Significant figures / precision control](#significant-figures--precision-control)
+4. [Affine / temperature handling](#affine--temperature-handling)
+5. [Dimensional-compatibility guard](#dimensional-compatibility-guard)
+6. [Order-of-magnitude prefixes](#order-of-magnitude-prefixes)
+7. [Compound / derived units](#compound--derived-units)
+8. [Live currency conversion](#live-currency-conversion)
+9. [Conversion history and favorites](#conversion-history-and-favorites)
+10. [Custom user-defined units](#custom-user-defined-units)
+11. [Supported magnitudes](#supported-magnitudes)
+12. [Extending the unit database](#extending-the-unit-database)
 
 ---
 
@@ -21,6 +28,8 @@ This guide covers the PySide6 GUI, the conversion model, and how to extend the u
 
 ```bash
 unit-converter-gui
+# or from source:
+python -m unit_converter.gui.app
 ```
 
 Requires the `[gui]` optional dependency group (`pip install "unit-converter[gui]"`).
@@ -34,12 +43,19 @@ Requires the `[gui]` optional dependency group (`pip install "unit-converter[gui
    updates in real time (bidirectional conversion).
 4. Conversion is live — no submit button is needed.
 
+### Hover tooltips
+
+Every widget (magnitude selector, unit selectors, order controls, entry fields, sweep
+control) carries a `QToolTip` description. Hover the mouse over any control to see its
+purpose and valid inputs.
+
 ### Changing the order of magnitude
 
 Each unit field has an associated **order** control. Scroll the mouse wheel over it, or
 use the Up/Down arrow keys while it is focused, to cycle through SI prefix exponents
 (e.g. `m` for milli, `k` for kilo, `M` for mega). For the **Data** magnitude the control
-cycles through IEC binary prefixes (k = 1024, M = 1024², etc.) instead.
+cycles through IEC binary prefixes (k = 1024, M = 1024², etc.) instead. Click the control
+to reset it to `1` (no prefix).
 
 The conversion formula applied is:
 
@@ -53,11 +69,7 @@ where `base` is 10 for all magnitudes except Data (where `base` is 1024).
 
 A separate **sweep** control lets you adjust the numeric value by scrolling, incrementing
 or decrementing by the current sweep step. Scroll the mouse wheel or use Up/Down keys while
-the sweep control is focused.
-
-### Reset
-
-Click the value field to reset it to zero and clear the conversion.
+the sweep control is focused. Click to reset to `...`.
 
 ### Keyboard shortcuts
 
@@ -65,16 +77,17 @@ Click the value field to reset it to zero and clear the conversion.
 |-----|--------|
 | Enter / Return | Re-evaluate the current value |
 | Up / Down | Increment / decrement the focused order or sweep control |
-| Right Ctrl | Cycle the sweep step |
+| Ctrl+Q | Quit the application |
 
 ### Context menu
 
-Right-click a value field for clipboard operations (copy/paste).
+Right-click the title-bar area for About and Exit options.
 
 ### Input clamping
 
 Negative values, `inf`, and `NaN` are clamped to `0.0` before conversion. This is the
-documented behaviour of the core and matches the original application.
+documented behaviour of the core. Note: `0.0` is also the result for a genuine input of
+exactly `0.0` — the two cases are indistinguishable from the output alone.
 
 ---
 
@@ -108,6 +121,55 @@ convert("Data", 1.0, "byte (B)", "byte (B)", from_order="G", to_order="1")
 
 The database is loaded lazily on the first call. `reload_database(data_dir)` forces a
 reload from a specific directory (useful in tests).
+
+---
+
+## Significant figures / precision control
+
+Pass `sig_figs` (a positive integer) to round the result to that many significant figures:
+
+```python
+convert("Mass", 1.0, "Av. pound (lb)", "gram (g)", sig_figs=3)
+# -> 454.0
+
+convert("Length", 12345.678, "meter (m)", "meter (m)", sig_figs=4)
+# -> 12350.0
+```
+
+Over REST, include `"sig_figs": <int>` in the `POST /convert` body.
+Over MCP, include `sig_figs` in the `post_convert` tool arguments.
+Omit the field (or pass `null`) to preserve full floating-point precision.
+
+---
+
+## Affine / temperature handling
+
+Magnitudes with offset units (e.g. Temperature: °C, °F, K) use the affine conversion path:
+
+```
+base_value = input * order_from * from_factor + from_offset
+result     = (base_value - to_offset) / (to_factor * order_to)
+```
+
+where `[factor, offset]` are stored per unit in the database. All existing magnitudes that
+ship without an offset field use the pure-ratio path unchanged, so existing conversions are
+byte-for-byte identical to earlier versions.
+
+---
+
+## Dimensional-compatibility guard
+
+Attempting to convert between units that do not belong to the same magnitude raises
+`IncompatibleUnitsError` (a subclass of `ValueError`). Over REST this propagates as
+HTTP 422. Over MCP it is returned as a structured tool error (`isError: true`).
+
+```python
+from unit_converter.core.converter import IncompatibleUnitsError
+try:
+    convert("Mass", 1.0, "gram (g)", "meter (m)")   # wrong magnitude for "meter (m)"
+except IncompatibleUnitsError as exc:
+    print(exc)
+```
 
 ---
 
@@ -155,6 +217,128 @@ reload from a specific directory (useful in tests).
 | `R` | (extended) | 9 |
 | `Q` | (extended) | 10 |
 
+The same symbol (e.g. `"G"`) means giga (10⁹) for all magnitudes except Data, where it
+means gibi (1024³).
+
+---
+
+## Compound / derived units
+
+The compound unit engine (`unit_converter.core.expr`) parses expressions like `km/h`,
+`m/s`, `kg*m/s^2`. It resolves each atom against the magnitude database, computes a
+combined SI factor and dimension vector, and checks dimensional compatibility before
+converting.
+
+### REST
+
+```bash
+# Parse an expression
+curl "http://localhost:8000/convert/compound/parse?expr=km/h"
+# -> {"expr": "km/h", "factor": 0.27778, "dimensions": {...}}
+
+# Convert using compound expressions
+curl -X POST http://localhost:8000/convert/compound \
+  -H "Content-Type: application/json" \
+  -d '{"value": 100, "from_expr": "km/h", "to_expr": "m/s"}'
+# -> {"result": 27.778, "from_expr": "km/h", "to_expr": "m/s"}
+```
+
+HTTP 422 is returned on dimension mismatches, unknown unit atoms, or syntax errors.
+
+---
+
+## Live currency conversion
+
+Currency rates are fetched from the **Frankfurter API** (`api.frankfurter.dev`) and cached
+locally as a dated table in `~/.unit-converter/rates.json`. On network failure the cached
+table is used as an offline fallback.
+
+### REST
+
+```bash
+# List supported ISO 4217 currency codes
+curl http://localhost:8000/currencies
+
+# Get the EUR→USD rate
+curl "http://localhost:8000/currencies/rate?from=EUR&to=USD"
+# -> {"from": "EUR", "to": "USD", "rate": 1.082, "date": "2026-06-13", "is_stale": false}
+
+# Convert 100 EUR to USD
+curl -X POST http://localhost:8000/currencies/convert \
+  -H "Content-Type: application/json" \
+  -d '{"from": "EUR", "to": "USD", "value": 100}'
+# -> {"result": 108.2, "rate": 1.082, "date": "2026-06-13", "is_stale": false}
+
+# Force-refresh the rate cache
+curl -X POST http://localhost:8000/currencies/refresh
+```
+
+`is_stale: true` means the cached rates are from a prior date (offline or stale).
+HTTP 404 is returned for unknown currency codes; HTTP 503 if the upstream is unreachable
+during a forced refresh.
+
+---
+
+## Conversion history and favorites
+
+History is persisted to `~/.unit-converter/history.json` (capped list, most-recent-first).
+Each entry records magnitude, units, orders, input value, result, `sig_figs`, and an
+ISO-8601 UTC timestamp. Entries can be marked as favorites with an optional label.
+
+### REST
+
+```bash
+# Retrieve full history
+curl http://localhost:8000/history
+
+# Retrieve only favorites
+curl http://localhost:8000/history/favorites
+
+# Record a conversion manually
+curl -X POST http://localhost:8000/history/record \
+  -H "Content-Type: application/json" \
+  -d '{"magnitude":"Mass","value":1.0,"from_unit":"Av. pound (lb)","to_unit":"gram (g)","result":453.6}'
+
+# Mark an entry as a favorite
+curl -X POST http://localhost:8000/history/favorites \
+  -H "Content-Type: application/json" \
+  -d '{"timestamp":"2026-06-13T10:00:00Z","label":"lb to g baseline"}'
+
+# Clear all history
+curl -X DELETE http://localhost:8000/history
+```
+
+### GUI
+
+The history panel is accessible from the main window. Recent conversions appear
+automatically; click an entry to mark it as a favorite.
+
+---
+
+## Custom user-defined units
+
+Custom units are persisted to `~/.unit-converter/custom.toml` and are available
+immediately in the same process after adding them. They are added to an existing
+magnitude with a conversion factor relative to that magnitude's base unit.
+
+### REST
+
+```bash
+curl -X POST http://localhost:8000/units/custom \
+  -H "Content-Type: application/json" \
+  -d '{"magnitude":"Mass","unit_name":"stone (st)","factor":6350.29}'
+# -> {"magnitude":"Mass","unit_name":"stone (st)","factor":6350.29}  (HTTP 201)
+```
+
+Validation: `unit_name` must be non-empty, ≤ 120 chars, free of control characters, path
+separators, and TOML structural characters. `factor` must be a positive finite number.
+HTTP 422 on any validation failure.
+
+### GUI
+
+Use the **Add custom unit** dialog (accessible from the main window) to define and persist
+a new unit without editing any file.
+
 ---
 
 ## Supported magnitudes
@@ -177,8 +361,8 @@ python -c "from unit_converter.core.converter import list_magnitudes; print(list
 ## Extending the unit database
 
 The unit database is `unit_converter/data/magnitudes.toml`. Edit this file to add or
-modify magnitudes and units. The legacy `Magnitudes.txt` is still readable but the TOML
-format is preferred.
+modify magnitudes and units shipped with the application. To add a unit at runtime without
+editing the shipped file, use `POST /units/custom` or the GUI custom-unit dialog instead.
 
 ### TOML format
 
@@ -203,9 +387,8 @@ units = { "bit (b)" = 1.0, "byte (B)" = 8.0 }
   The factor for the base unit should be `1.0`.
 - **Factors must be positive, non-zero, finite** floats. The loader rejects zero, negative,
   NaN, and infinite factors with a `MagnitudeDataError` and a precise error message.
-- **Exponents in unit names** (e.g. `m²`, `m³`) are stored using Unicode superscript
-  characters directly. Do not use the digit `2` or `3` as a trailing exponent in new
-  entries — write `m²` not `m2`.
+- **Exponents in unit names** (e.g. `m²`, `m³`) use Unicode superscript characters
+  directly. Do not use the digit `2` or `3` as a trailing exponent — write `m²` not `m2`.
 
 #### Adding a new magnitude
 
@@ -217,36 +400,3 @@ units = { "meter per second (m/s)" = 1.0, "kilometer per hour (km/h)" = 0.27778,
 
 After saving, restart the application or call `reload_database()` in Python to pick up
 the change. No code changes are required.
-
-### Legacy Magnitudes.txt format
-
-The legacy file uses a three-lines-per-magnitude structure:
-
-```
-<magnitude name>
-<comma-separated unit names>
-<comma-separated conversion factors>
-```
-
-Blank lines between blocks are ignored. The loader enforces the same zero-factor and
-positive-factor rules as the TOML loader.
-
-When both `magnitudes.toml` and `Magnitudes.txt` are present, TOML takes precedence.
-
----
-
-## Legacy Tkinter entry point
-
-`UConverter_UI.pyw` is the original Tkinter-based application, retained for backward
-compatibility. It is no longer the primary entry point.
-
-To run it directly:
-
-```bash
-python UConverter_UI.pyw
-# or via the installed script:
-unit-converter
-```
-
-The Tkinter entry point does not use the `unit_converter.core` package. It is a
-self-contained legacy module. It may be removed in a future release.

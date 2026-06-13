@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "unit-converter"
@@ -23,7 +23,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-# GUI front-end (Tkinter is stdlib; PySide6 is for the future Qt migration)
+# GUI front-end (PySide6)
 gui = [
     "PySide6~=6.11.1",
 ]
@@ -46,16 +46,11 @@ dev = [
 ]
 
 [project.scripts]
-# Legacy Tkinter entry point — retained for backward compatibility.
-# Users who have Tkinter available can still run this; it is no longer the
-# primary entry point.  May be removed in a future release.
-unit-converter = "UConverter_UI:main_tkinter"
-
 # Primary PySide6 GUI entry point (requires the [gui] optional dependency group).
 unit-converter-gui = "unit_converter.gui.app:main"
 
 # Access-layer entry points (require the [api] optional dependency group).
-# Starts the combined REST + MCP server (uvicorn on 0.0.0.0:8000).
+# Starts the combined REST + MCP server (uvicorn on 127.0.0.1:8000 by default; pass --host 0.0.0.0 for LAN).
 unit-converter-api = "unit_converter.api.main:run_server"
 # Runs the MCP server over stdio (for CLI / local agent clients).
 unit-converter-mcp = "unit_converter.api.mcp_server:run_stdio"
@@ -69,7 +64,7 @@ include = ["unit_converter*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb=short"
+addopts = "--tb=short --cov-fail-under=90"
 
 [tool.coverage.run]
 source = ["unit_converter"]
@@ -77,13 +72,13 @@ omit = [
     # Exclude GUI, API transport/server, and entry-point files from the core coverage gate.
     # Only unit_converter/core/ is subject to the >=90% line coverage requirement.
     # The access-layer smoke tests (testing workstream) cover the api/ surface separately.
-    "UConverter_UI.pyw",
     "unit_converter/data/*",
     "unit_converter/gui/*",
     "unit_converter/api/*",
 ]
 
 [tool.coverage.report]
+fail_under = 90
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

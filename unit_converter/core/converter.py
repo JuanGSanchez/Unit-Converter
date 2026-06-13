@@ -3,7 +3,7 @@ unit_converter.core.converter
 ==============================
 Pure, UI-independent unit conversion logic.
 
-This module contains **no Tkinter or Qt imports**.  It is the single source of
+This module contains **no GUI imports**.  It is the single source of
 truth for conversion math and is the layer that the GUI, REST API, and MCP
 server all call.
 
@@ -22,11 +22,14 @@ convert(
     to_unit: str,
     from_order: str = "1",
     to_order: str = "1",
+    sig_figs: int | None = None,
 ) -> float
     Convert *value* from *from_unit* to *to_unit* within *magnitude*.
     *from_order* / *to_order* are SI-prefix keys (e.g. ``"k"``, ``"M"``) or
     ``"1"`` for no prefix.  For the ``Data`` magnitude the 1024-based IEC
     prefix table is used instead of the decimal SI table.
+    If *sig_figs* is given (a positive integer), the result is rounded to that
+    many significant figures; otherwise full floating-point precision is returned.
 
 Input-clamping policy (matches original UI behaviour)
 ------------------------------------------------------
@@ -64,8 +67,21 @@ from unit_converter.core.data_loader import MagnitudeDataError, load_magnitudes
 
 
 # ---------------------------------------------------------------------------
-# SI-prefix / order-of-magnitude tables (lifted verbatim from original code,
-# lines 68–72 of UConverter_UI.pyw, so numeric behaviour is preserved exactly)
+# Public exception for cross-dimension conversions (UC-I02)
+# ---------------------------------------------------------------------------
+
+class IncompatibleUnitsError(ValueError):
+    """
+    Raised when *from_unit* and *to_unit* do not belong to the same magnitude.
+
+    This is a subclass of ``ValueError`` so existing callers that catch
+    ``ValueError`` continue to work; callers that need to distinguish
+    cross-dimension errors can catch ``IncompatibleUnitsError`` explicitly.
+    """
+
+
+# ---------------------------------------------------------------------------
+# SI-prefix / order-of-magnitude tables (matching original numeric behaviour exactly)
 # ---------------------------------------------------------------------------
 
 #: Decimal (SI) prefix exponents.  key = prefix symbol, value = power of 10.
@@ -166,6 +182,20 @@ def list_units(magnitude: str) -> dict:
     return {"units": units, "base_unit": units[0]}
 
 
+def _round_sig_figs(value: float, sig_figs: int) -> float:
+    """
+    Round *value* to *sig_figs* significant figures.
+
+    Returns 0.0 unchanged (log10 of zero is undefined).
+    *sig_figs* must be a positive integer.
+    """
+    if value == 0.0:
+        return 0.0
+    magnitude_exp = math.floor(math.log10(abs(value)))
+    factor = 10 ** (sig_figs - 1 - magnitude_exp)
+    return round(value * factor) / factor
+
+
 def convert(
     magnitude: str,
     value: float,
@@ -173,6 +203,7 @@ def convert(
     to_unit: str,
     from_order: str = "1",
     to_order: str = "1",
+    sig_figs: "int | None" = None,
 ) -> float:
     """
     Convert *value* from *from_unit* to *to_unit* within *magnitude*.
@@ -193,6 +224,9 @@ def convert(
         means no prefix (multiplier = 1).  Example: ``"k"`` for kilo.
     to_order:
         SI (or IEC for Data) prefix applied to *to_unit*.
+    sig_figs:
+        If given (a positive integer), round the result to this many
+        significant figures.  ``None`` (default) preserves full precision.
 
     Returns
     -------
@@ -202,7 +236,11 @@ def convert(
     Raises
     ------
     ValueError
-        On unknown magnitude, unit, or order key.
+        On unknown magnitude, unit, or order key; or if *sig_figs* is not a
+        positive integer.
+    IncompatibleUnitsError
+        If *from_unit* or *to_unit* do not exist within *magnitude* — a more
+        specific subclass of ``ValueError`` for cross-dimension detection.
 
     Notes
     -----
@@ -216,8 +254,9 @@ def convert(
     from DICT_ORDER_SI / DICT_ORDER_IEC, and ``from_factor`` / ``to_factor``
     are the conversion factors relative to the base unit.
 
-    This formula is lifted verbatim from the original ``unit_converter`` method
-    (lines 315–334 of UConverter_UI.pyw) to preserve numeric behaviour exactly.
+    For affine/temperature magnitudes (UC-I04), the formula uses offset
+    metadata stored alongside the factor in the database; all existing
+    magnitudes with no offset field use the pure-ratio path unchanged.
 
     Example::
 
@@ -227,7 +266,16 @@ def convert(
         8.0
         >>> convert("Length", 1.0, "meter (m)", "meter (m)", from_order="k", to_order="1")
         1000.0
+        >>> convert("Mass", 1.0, "Av. pound (lb)", "gram (g)", sig_figs=3)
+        454.0
     """
+    # --- validate sig_figs early ---
+    if sig_figs is not None:
+        if not isinstance(sig_figs, int) or sig_figs < 1:
+            raise ValueError(
+                f"sig_figs must be a positive integer, got {sig_figs!r}."
+            )
+
     db = _get_db()
 
     # --- validate magnitude ---
@@ -238,14 +286,14 @@ def convert(
         )
     units = db[magnitude]
 
-    # --- validate units ---
+    # --- validate units (UC-I02: typed error for unknown/incompatible units) ---
     if from_unit not in units:
-        raise ValueError(
+        raise IncompatibleUnitsError(
             f"Unknown unit {from_unit!r} in magnitude {magnitude!r}.  "
             f"Available: {list(units.keys())}"
         )
     if to_unit not in units:
-        raise ValueError(
+        raise IncompatibleUnitsError(
             f"Unknown unit {to_unit!r} in magnitude {magnitude!r}.  "
             f"Available: {list(units.keys())}"
         )
@@ -273,12 +321,23 @@ def convert(
     # --- input clamping (matches original UI behaviour) ---
     clamped = _clamp_input(value)
 
-    if clamped == 0.0:
-        return 0.0
+    # --- fetch factors (supports both plain float and affine [factor, offset] entries) ---
+    from_entry = units[from_unit]
+    to_entry = units[to_unit]
+    if isinstance(from_entry, (list, tuple)):
+        from_factor, from_offset = float(from_entry[0]), float(from_entry[1])
+    else:
+        from_factor, from_offset = float(from_entry), 0.0
+    if isinstance(to_entry, (list, tuple)):
+        to_factor, to_offset = float(to_entry[0]), float(to_entry[1])
+    else:
+        to_factor, to_offset = float(to_entry), 0.0
 
-    # --- fetch factors ---
-    from_factor = units[from_unit]
-    to_factor = units[to_unit]
+    # Short-circuit: 0.0 input on a pure-ratio magnitude always gives 0.0.
+    # Do NOT short-circuit affine units (e.g. 0°C → 273.15 K is non-zero).
+    is_affine = (from_offset != 0.0 or to_offset != 0.0)
+    if clamped == 0.0 and not is_affine:
+        return 0.0
 
     # Second-line defence: guard division by zero even if loader missed it.
     if to_factor == 0.0:
@@ -293,8 +352,29 @@ def convert(
     order_from = base ** order_from_exp
     order_to = base ** order_to_exp
 
-    # --- core formula (verbatim from original lines 315–334) ---
-    result = (clamped * order_from * from_factor) / (order_to * to_factor)
+    # --- affine / offset handling (UC-I04) ---
+    # For magnitudes with offset units (e.g. Temperature: °C, °F, K),
+    # the database stores [factor, offset] per unit.
+    # The affine formula (absolute conversion):
+    #   base_value = clamped * order_from * from_factor + from_offset
+    #   result     = (base_value - to_offset) / (to_factor * order_to)
+    #
+    # offset==0 for all existing magnitudes → pure-ratio path, byte-for-byte identical.
+    if is_affine:
+        # Affine path: offset units (e.g. temperature absolute conversion).
+        # Convention: [factor, offset] such that T_base = T_unit * factor + offset.
+        # Forward: base_value = clamped * order_from * from_factor + from_offset
+        # Reverse: result = (base_value - to_offset) / (to_factor * order_to)
+        base_value = clamped * order_from * from_factor + from_offset
+        result = (base_value - to_offset) / (to_factor * order_to)
+    else:
+        # Pure-ratio path (all existing magnitudes): verbatim from original
+        result = (clamped * order_from * from_factor) / (order_to * to_factor)
+
+    # --- significant figures rounding (UC-I01) ---
+    if sig_figs is not None:
+        result = _round_sig_figs(result, sig_figs)
+
     return result
 
 
@@ -307,9 +387,7 @@ def _clamp_input(value: float) -> float:
     Apply the input-clamping policy documented in the module docstring.
 
     Returns 0.0 for negative, NaN, or +inf/-inf inputs; otherwise returns
-    the value unchanged.  This matches the original ``if val < 0`` /
-    ``elif val == np.inf`` branches in UC_UI.unit_converter (lines 310–313 and
-    326–328), but uses stdlib math instead of NumPy.
+    the value unchanged.  Uses stdlib math throughout (no NumPy dependency).
     """
     try:
         f = float(value)
