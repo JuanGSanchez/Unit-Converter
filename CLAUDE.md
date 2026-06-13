@@ -57,12 +57,49 @@ subagents below own the actual work.
 - Build/install check: `python -m build` then `pip install .` (clean venv), `import unit_converter`.
 - Artifact hygiene: `git status --ignored` (build dirs ignored, tracked tree clean).
 
-## In-repo agents (use these; don't do their jobs ad hoc)
-- **`.claude/agents/unit-conversion-operator.md`** — drives the running conversion
-  service via REST/MCP (no GUI). Use to convert values or list magnitudes/units.
-- **`.claude/agents/unit-converter-maintainer.md`** — implements backlog items
-  end-to-end (code/data/test/doc edits, invariant-preserving, gate-holding). Use
-  to fix bugs, add units/magnitudes/parameters, or do a `docs/BACKLOG.md` item.
+## AI asset suite (single source of truth — use these; don't do their jobs ad hoc)
+
+### Agents (`.claude/agents/`)
+- **unit-conversion-operator** — drives the RUNNING service via the 16-op MCP/REST access layer
+  (no GUI): convert, compound, currency, history, custom units, discovery. Operates, never edits.
+- **core-dev** — headless conversion core: `magnitudes.toml`, factors, ratio/affine math, prefixes,
+  sig-figs, dimensional guard, `expr.py`/`rates.py`/`history.py` (UC-B05, UC-I01/I02/I04/I06).
+- **gui-dev** — PySide6 GUI; thin client over the core, hover-tooltip invariant, non-masking error
+  handling (UC-B03, UC-I07).
+- **access-dev** — dual MCP+REST over one shared service: thread params, error-code mapping,
+  boundary validation, bind, operation-id→tool-name contract (UC-I01/I02, UC-B07/B08, gated I03/I05).
+- **test-author** — pytest + core coverage-gate custody (≥90%), deterministic offline tests, exact
+  MCP tool-name assertion (UC-B04/B06/B07).
+- **packaging-builder** — PEP 517 backend + PyInstaller spec/build + artifact hygiene (UC-B01/B02).
+- **docs-writer** — keeps README / operating doc / access docs / agent contracts truthful to code
+  (UC-I01..I06, UC-B09).
+- **reviewer** — read-only correctness + security/boundary gate: verifies the 7 invariants, surface
+  safety, secrets/artifacts, coverage; returns PASS/FAIL. Authors no fix.
+
+Role split: operator OPERATES the service; the dev agents EDIT their subsystem; reviewer GATES.
+The former single `unit-converter-maintainer` is decomposed into core/gui/access/test/packaging/docs.
+
+### Instructions (`.claude/instructions/`) — agents reference these, don't restate them
+- **ai-execution-discipline.md** — anti-programmatic guardrails shared by all agents:
+  verify-before-edit, assumption checks, minimal change, stop-and-confirm on irreversible/ambiguous,
+  acceptance-criteria-driven done, context-budget (target-by-search, checkpoint ~70%, Gleaner=5).
+- **python-repo-conventions.md** — stdlib-first, typing, headless-core purity, deterministic offline
+  tests, no secrets, optional-dep groups, affine note.
+
+### Skills (`.claude/skills/`)
+- **add-unit-or-magnitude** — extend `magnitudes.toml` (unit/magnitude) + locking tests + gate.
+- **expose-op** — thread a core fn/param through service→REST→derived MCP tool + error mapping + tests.
+- **run-quality-gate** (`scripts/quality_gate.py`) — pytest+coverage + invariant grep sweep → PASS/FAIL.
+- **build-release** (`scripts/build_release.py`) — wheel + PyInstaller build, install/import + clean-tree verify.
+
+### Hooks (`.claude/settings.json` + `.claude/hooks/`) — harness-enforced invariants
+- **headless_core_guard.py** (PreToolUse) — blocks a GUI/transport import into `unit_converter/core/*`
+  (invariant 1).
+- **no_secrets_or_artifacts.py** (PreToolUse) — blocks writing a secret or a build-artifact path
+  (invariant 6 / UC-B02).
+- **tkinter_regression_guard.py** (PreToolUse) — blocks any `import tkinter` or `.pyw` reappearing.
+- **coverage_gate_reminder.py** (PostToolUse, non-blocking) — reminds to run the gate after touching
+  core/ or tests/ (invariant 5 / UC-B04).
 
 ## Backlog
 The authoritative work list is `docs/BACKLOG.md`, referenced by item ID

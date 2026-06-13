@@ -3,12 +3,11 @@
 This document describes how an external agent (or any automated client) should drive the
 Unit-Converter repository via its access layer.
 
-> **In-repo agent assets:**
+> **In-repo agent assets:** (full roster + instructions/skills/hooks registered in `CLAUDE.md`)
 > - [`.claude/agents/unit-conversion-operator.md`](../.claude/agents/unit-conversion-operator.md)
->   — the `unit-conversion-operator` Claude Code subagent: drives conversions headlessly via MCP/REST.
-> - [`.claude/agents/unit-converter-maintainer.md`](../.claude/agents/unit-converter-maintainer.md)
->   — the `unit-converter-maintainer` Claude Code subagent: implements backlog items, fixes bugs,
->   edits code/tests/data/docs.
+>   — drives conversions headlessly via the 16-op MCP/REST access layer.
+> - Repo maintenance is owned by focused dev agents — `core-dev`, `gui-dev`, `access-dev`,
+>   `test-author`, `packaging-builder`, `docs-writer` — and gated by `reviewer`. See `CLAUDE.md`.
 
 ---
 
