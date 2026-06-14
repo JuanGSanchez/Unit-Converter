@@ -129,18 +129,3 @@ def test_rest_unknown_magnitude_returns_error(client):
     resp = asyncio.run(_run())
     assert resp.status_code in (400, 422)
 
-
-# ---------------------------------------------------------------------------
-# MCP smoke test
-# ---------------------------------------------------------------------------
-
-def test_mcp_tool_exact_names():
-    """
-    Legacy smoke test — superseded by test_api_routes.test_mcp_tool_exact_names_16
-    which asserts the full 16-tool set.  This test is kept for history but is
-    intentionally skipped to avoid false failures against the expanded route set.
-    """
-    pytest.skip(
-        "Superseded by test_mcp_tool_exact_names_16 in test_api_routes.py "
-        "(route set expanded from 4 to 16 operations)."
-    )
