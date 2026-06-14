@@ -1,0 +1,161 @@
+# magnitudes.toml — Unit-Converter magnitude database
+#
+# Schema (one TOML table per magnitude):
+#
+#   [MagnitudeName]
+#   base_unit = "<unit name>"          # informational; the first entry in units is the base
+#   [MagnitudeName.units]
+#   "<unit name>" = <conversion_factor_float>
+#
+# Rules:
+#   - The first unit listed is the base unit (factor 1.0 by convention for the
+#     default database; the loader does not enforce this for custom databases).
+#   - Conversion factors must be positive, non-zero finite floats.
+#   - All factors are relative to the base unit:
+#       result = (value * from_factor) / to_factor
+#     (prefix / order-of-magnitude scaling is handled separately by the converter).
+#   - To add a new magnitude, add a new [MagnitudeName] table following the schema.
+#   - Unit names may include Unicode superscripts (e.g. "m²") — no special escaping needed.
+#
+# Read by: unit_converter.core.data_loader._load_toml  (Python tomllib, stdlib >=3.11)
+#
+# Legacy-to-canonical unit name mapping (UC-B09)
+# ----------------------------------------------
+# The original Magnitudes.txt used different spellings for some units.
+# The TOML names below are canonical; use these when calling the API or GUI:
+#
+#   Legacy name            -> Canonical name (this file)
+#   "jule (J)"             -> "joule (J)"        (Energy)
+#   "electronvolt (Ev)"    -> "electronvolt (eV)" (Energy)
+#
+# If you load the legacy Magnitudes.txt file directly, unit names may differ.
+# The TOML loader (this file) is the source of truth for all supported names.
+
+[Mass]
+base_unit = "gram (g)"
+
+[Mass.units]
+"gram (g)"       = 1.0
+"Av. pound (lb)" = 453.6
+"Av. ounce (oz)" = 28.35
+
+[Length]
+base_unit = "meter (m)"
+
+[Length.units]
+"meter (m)" = 1.0
+"inch (in)" = 0.0254
+"yard (yd)" = 0.9144
+"mile (mi)" = 1609.34
+
+[Area]
+base_unit = "square meter (m²)"
+
+[Area.units]
+"square meter (m²)" = 1.0
+"square inch (in²)" = 0.00064516
+"square yard (yd²)" = 0.836127
+"square mile (mi²)" = 2590000.0
+
+[Volume]
+base_unit = "cubic meter (m³)"
+
+[Volume.units]
+"cubic meter (m³)" = 1.0
+"litre (l)"        = 0.001
+"Imp. pint (pt)"   = 0.000568261
+"US pint (pt)"     = 0.000473176
+
+[Time]
+base_unit = "second (s)"
+
+[Time.units]
+"second (s)" = 1.0
+"minute (min)" = 60.0
+"hour (hr)"    = 3600.0
+"day (d)"      = 86400.0
+
+[Energy]
+base_unit = "joule (J)"
+
+[Energy.units]
+"joule (J)"        = 1.0
+"calorie (cal)"    = 4.184
+"electronvolt (eV)" = 1.6022e-19
+"watt-hour (Wh)"   = 3600.0
+
+[Power]
+base_unit = "watt (W)"
+
+[Power.units]
+"watt (W)"  = 1.0
+"kgm/s"     = 9.806215
+"cal/h"     = 1163.0556
+"erg/s"     = 1e-7
+"HP"        = 745.7
+"CV"        = 735.35375
+
+[Pressure]
+base_unit = "Pascal (Pa)"
+
+[Pressure.units]
+"Pascal (Pa)"      = 1.0
+"bar (b)"          = 100000.0
+"atmosphere (atm)" = 101325.0
+"mm Hg"            = 133.322
+"Torr (Torr)"      = 133.322
+
+[Data]
+base_unit = "bit (b)"
+# Note: order-of-magnitude scaling for Data uses base 1024 (IEC prefixes),
+# not base 10 (SI prefixes).  This is handled by the converter; the factors
+# here are the *unit* conversion factors only (bit <-> byte).
+
+[Data.units]
+"bit (b)"  = 1.0
+"byte (B)" = 8.0
+
+# ---------------------------------------------------------------------------
+# Temperature (UC-I04) — affine/offset magnitude
+# ---------------------------------------------------------------------------
+# Base unit: kelvin (K), factor=1, offset=0.
+# Convention: [factor, offset] means T_kelvin = T_unit * factor + offset.
+#
+# Derived from:
+#   °C: T_K = T_C + 273.15           → factor=1,      offset=273.15
+#   °F: T_K = (T_F - 32)*(5/9)+273.15 = T_F*(5/9)+255.3722...
+#             → factor=5/9≈0.5556,   offset=255.37222...
+#   °R: T_K = T_R*(5/9)              → factor=5/9,    offset=0
+#
+# The optional [Temperature.offsets] table stores the per-unit additive offset
+# (the base-unit value at 0 of this unit).  Units without an offsets entry are
+# treated as pure multiplicative (offset=0).
+#
+# Temperature INCREMENTS (ΔT) do not use offsets — add a separate magnitude
+# "Temperature_delta" that uses scale-only factors if needed.
+
+[Temperature]
+base_unit = "kelvin (K)"
+
+[Temperature.units]
+"kelvin (K)"     = 1.0
+"celsius (°C)"   = 1.0
+"fahrenheit (°F)" = 0.5555555555555556
+"rankine (°R)"   = 0.5555555555555556
+
+[Temperature.offsets]
+# offsets: value in Kelvin corresponding to 0 in each unit
+"kelvin (K)"     = 0.0
+"celsius (°C)"   = 273.15
+"fahrenheit (°F)" = 255.37222222222223
+"rankine (°R)"   = 0.0
+
+# Temperature increments (ΔT, scale-only — no offset applied)
+[Temperature_delta]
+base_unit = "kelvin (K)"
+
+[Temperature_delta.units]
+"kelvin (K)"     = 1.0
+"celsius (°C)"   = 1.0
+"fahrenheit (°F)" = 0.5555555555555556
+"rankine (°R)"   = 0.5555555555555556
