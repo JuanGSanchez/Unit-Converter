@@ -16,21 +16,27 @@ Features:
   position used by the Up/Down arrow increment; click resets to "...".
 - Arrow-key (Up/Down) and mouse-wheel nudge of the numeric entry value.
 - Hover tooltips (QToolTip) for every widget that carries user-visible info.
-- Right-click context menu: About and Exit.
+  Tooltips use rich-text <p> wrapping so multi-line text is never clipped.
+- Right-click context menu: Settings, History/Favorites, Add Custom Unit,
+  About, and Exit.
 - Ctrl+Q exits the application.
 - Return/Enter triggers conversion.
 - All conversion math delegated to ``unit_converter.core.converter``.
 - Conversion history panel (UC-I07): recent conversions persist across sessions.
 - Custom-unit dialog: add user-defined units persisted to ~/.unit-converter/custom.toml.
+- Light/Dark theming: all colors driven from ``gui.theme``; user picks and
+  persists their palette via Settings (right-click menu).
 
 Implementation notes
 --------------------
 - The window is NOT frameless; the OS title-bar is preserved as expected.
-- Hover tooltips use Qt native QToolTip (``setToolTip``) — displayed
-  automatically on hover, no manual geometry calculation needed.
+- Hover tooltips use Qt native QToolTip (``setToolTip``) with rich-text
+  ``<p>`` markup so Qt wraps text correctly and never clips multi-line tips.
 - Ctrl+Q is the quit shortcut (universally expected in Qt apps).
 - No ``del locals()`` / ``gc.collect()`` / ``del self`` cargo-cult exit — uses
   standard Qt ``QApplication.quit()``.
+- Theme state is loaded from ``~/.unit-converter/gui_theme.json`` on startup
+  via the Qt-independent ``gui.theme_persist`` helper.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from PySide6.QtCore import Qt
 
 logger = logging.getLogger(__name__)
 from PySide6.QtGui import (
+    QColor,
     QDoubleValidator,
     QIcon,
     QKeySequence,
@@ -50,10 +57,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -61,6 +70,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -73,6 +84,14 @@ from unit_converter.core.history import (
     list_favorites,
     load_history,
     record as _record_history,
+)
+from unit_converter.gui import theme as _theme
+from unit_converter.gui.theme_persist import (
+    is_valid_hex_color,
+    load_theme_prefs,
+    merge_theme_colors,
+    normalize_hex_color,
+    save_theme_prefs,
 )
 from unit_converter.gui.resources import logo_path
 
@@ -92,21 +111,31 @@ __license__ = "GPLv3"
 _WINDOW_WIDTH = 235
 _WINDOW_HEIGHT = 385
 
-# Colours — as close to the original palette as Qt stylesheets allow
-_BG_MAIN = "#bfbfbf"
-_BG_TITLE = "#999999"
-_BG_ENTRY = "white"
-_BG_SWEEP = "white"
-_FG_TITLE = "blue"
-_FG_ENTRY = "black"
-_FG_MAIN = "black"
 
-# Fonts (Qt stylesheet / font-family strings closest to originals)
-_FONT_TITLE = "font-family: Arial; font-size: 12pt; font-weight: bold;"
-_FONT_ENTRY = "font-family: Verdana; font-size: 11pt;"
-_FONT_VAL = "font-family: Verdana; font-size: 11pt;"
-_FONT_TEXT = "font-family: Verdana; font-size: 12pt;"
-_FONT_ORDER = "font-family: Arial; font-size: 11pt;"
+# ---------------------------------------------------------------------------
+# Tooltip helper — ensures full text is visible (TASK 3)
+# ---------------------------------------------------------------------------
+
+def _tip(text: str) -> str:
+    """
+    Wrap a tooltip string in rich-text markup so Qt renders it at a
+    comfortable width and never clips multi-line content.
+
+    Qt switches to rich-text mode when the string starts with ``<``, which
+    also enables its built-in word-wrap for QToolTip.  The ``white-space:
+    pre`` style preserves intentional newlines from the caller while still
+    allowing the tooltip popup to grow as needed.
+    """
+    # Escape any bare ampersands / angle brackets in the raw text so HTML
+    # does not misinterpret them; then re-insert intentional newlines as <br>.
+    safe = (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\n", "<br>")
+    )
+    return f"<p style='white-space:pre;margin:4px'>{safe}</p>"
 
 
 # ---------------------------------------------------------------------------
@@ -127,19 +156,21 @@ class _OrderLabel(QLabel):
         self._keys: list[str] = ["1"]  # prefix symbol sequence
         self._vals: list[int] = [0]    # exponent sequence
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(
+        self.setToolTip(_tip(
             "Scroll to change order of magnitude.\nClick to reset."
-        )
-        # Styling to mimic Tk RIDGE relief
-        self.setStyleSheet(
-            "border: 2px ridge #888888; "
-            "padding: 4px 6px; "
-            f"font-family: Arial; font-size: 11pt; "
-            f"background-color: {_BG_MAIN}; "
-            "min-width: 24px; max-width: 32px;"
-        )
+        ))
+        # Default styling (will be overridden by apply_colors_to_main_window)
+        self._apply_default_style()
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
+
+    def _apply_default_style(self) -> None:
+        colors = _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_order_label_stylesheet(colors))
+
+    def restyle(self, colors: dict[str, str]) -> None:
+        """Update stylesheet from the provided colour mapping."""
+        self.setStyleSheet(_theme.build_order_label_stylesheet(colors))
 
     def set_order_list(self, keys: list[str], vals: list[int]) -> None:
         """Update the prefix table this label cycles through."""
@@ -185,18 +216,20 @@ class _SweepLabel(QLabel):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("...", parent)
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(
+        self.setToolTip(_tip(
             "Scroll to change digit position sweep.\nClick to reset."
-        )
-        self.setStyleSheet(
-            f"background-color: {_BG_SWEEP}; "
-            "border: 1px groove #aaaaaa; "
-            "padding: 4px 6px; "
-            "font-family: Verdana; font-size: 11pt; "
-            "min-width: 24px; max-width: 32px;"
-        )
+        ))
+        self._apply_default_style()
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
+
+    def _apply_default_style(self) -> None:
+        colors = _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_sweep_label_stylesheet(colors))
+
+    def restyle(self, colors: dict[str, str]) -> None:
+        """Update stylesheet from the provided colour mapping."""
+        self.setStyleSheet(_theme.build_sweep_label_stylesheet(colors))
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -256,17 +289,19 @@ class _NumEntry(QLineEdit):
         validator.setNotation(QDoubleValidator.StandardNotation)
         self.setValidator(validator)
         self.setAlignment(Qt.AlignLeft)
-        self.setStyleSheet(
-            f"background-color: {_BG_ENTRY}; "
-            f"color: {_FG_ENTRY}; "
-            "font-family: Verdana; font-size: 11pt; "
-            "border: 3px sunken #999999; "
-            "padding: 2px 4px;"
-        )
+        self._apply_default_style()
         self.setEnabled(False)
-        self.setToolTip(
+        self.setToolTip(_tip(
             "Write or press Enter\nto run the conversion."
-        )
+        ))
+
+    def _apply_default_style(self) -> None:
+        colors = _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_entry_stylesheet(colors))
+
+    def restyle(self, colors: dict[str, str]) -> None:
+        """Update stylesheet from the provided colour mapping."""
+        self.setStyleSheet(_theme.build_entry_stylesheet(colors))
 
     def _nudge(self, step: int) -> None:
         """Increment / decrement the current value by one step at the current sweep position."""
@@ -322,17 +357,26 @@ class _HistoryDialog(QDialog):
     via the ``rerun_entry`` signal (the parent connects to ``_apply_history``).
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        colors: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Conversion History")
         self.resize(420, 340)
-        self.setToolTip("Recent conversions and saved favorites.")
+        self.setToolTip(_tip("Recent conversions and saved favorites."))
+
+        # Apply dialog theme using the live override-aware color mapping.
+        # Falls back to the built-in Light palette if no colors are supplied.
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
         self._selected_entry: HistoryEntry | None = None
 
         layout = QVBoxLayout(self)
 
         self._list = QListWidget()
-        self._list.setToolTip("Recent conversions — double-click to re-run.")
+        self._list.setToolTip(_tip("Recent conversions — double-click to re-run."))
         layout.addWidget(self._list)
 
         buttons = QDialogButtonBox()
@@ -341,8 +385,8 @@ class _HistoryDialog(QDialog):
         buttons.addButton(QDialogButtonBox.Close)
         layout.addWidget(buttons)
 
-        self._btn_rerun.setToolTip("Re-populate the converter with this entry.")
-        self._btn_fav.setToolTip("Mark this entry as a favorite.")
+        self._btn_rerun.setToolTip(_tip("Re-populate the converter with this entry."))
+        self._btn_fav.setToolTip(_tip("Mark this entry as a favorite."))
 
         self._btn_rerun.clicked.connect(self._on_rerun)
         self._btn_fav.clicked.connect(self._on_favorite)
@@ -385,31 +429,41 @@ class _HistoryDialog(QDialog):
 class _AddUnitDialog(QDialog):
     """Simple dialog for adding a custom unit."""
 
-    def __init__(self, magnitude_names: list[str], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        magnitude_names: list[str],
+        parent: QWidget | None = None,
+        colors: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Add Custom Unit")
         self.resize(300, 180)
-        self.setToolTip("Add a custom unit to an existing magnitude.")
+        self.setToolTip(_tip("Add a custom unit to an existing magnitude."))
+
+        # Apply dialog theme using the live override-aware color mapping.
+        # Falls back to the built-in Light palette if no colors are supplied.
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
         self._cb_magnitude = QComboBox()
         self._cb_magnitude.addItems(magnitude_names)
-        self._cb_magnitude.setToolTip("The magnitude to extend.")
+        self._cb_magnitude.setToolTip(_tip("The magnitude to extend."))
         form.addRow("Magnitude:", self._cb_magnitude)
 
         self._ed_name = QLineEdit()
         self._ed_name.setPlaceholderText("e.g. stone (st)")
-        self._ed_name.setToolTip("Name for the new unit.")
+        self._ed_name.setToolTip(_tip("Name for the new unit."))
         form.addRow("Unit name:", self._ed_name)
 
         self._ed_factor = QLineEdit()
         self._ed_factor.setPlaceholderText("e.g. 6350.29")
-        self._ed_factor.setToolTip(
+        self._ed_factor.setToolTip(_tip(
             "Conversion factor relative to the magnitude's base unit.\n"
             "Must be a positive, non-zero finite number."
-        )
+        ))
         form.addRow("Factor:", self._ed_factor)
 
         layout.addLayout(form)
@@ -440,6 +494,210 @@ class _AddUnitDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Settings dialog (TASK 2)
+# ---------------------------------------------------------------------------
+
+# Human-readable labels for each colour role key
+_COLOR_ROLE_LABELS: dict[str, str] = {
+    "bg_main":      "Window background",
+    "bg_title":     "Title / header strip background",
+    "bg_entry":     "Entry field background",
+    "bg_sweep":     "Sweep label background",
+    "bg_combo":     "Combo box background",
+    "bg_dialog":    "Dialog background",
+    "fg_title":     "Title / header accent text",
+    "fg_main":      "Body text",
+    "fg_entry":     "Entry field text",
+    "border_main":  "Control border",
+    "border_heavy": "Ridge / heavy border",
+}
+
+
+class _SettingsDialog(QDialog):
+    """
+    Settings dialog — theme selection and per-widget-type colour overrides.
+
+    Modelled on :class:`_HistoryDialog`.  Offers:
+    - A built-in theme selector (Light / Dark).
+    - A scrollable per-widget-type colour table with a colour swatch button
+      (opens QColorDialog for Office-style palette picking) and a validated
+      ``#RRGGBB`` hex text entry.
+    - "Apply" (applies immediately without closing) and standard Ok/Cancel.
+
+    On Ok the chosen colours are persisted to
+    ``~/.unit-converter/gui_theme.json`` via :func:`theme_persist.save_theme_prefs`.
+    """
+
+    def __init__(
+        self,
+        current_colors: dict[str, str],
+        current_theme_name: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Settings — Theme & Colors")
+        self.resize(430, 480)
+        self.setToolTip(_tip("Configure the application theme and widget colours."))
+
+        # Working copy of colours that the user is editing
+        self._working: dict[str, str] = dict(current_colors)
+        self._theme_name: str = current_theme_name
+
+        layout = QVBoxLayout(self)
+
+        # -- Theme selector ---------------------------------------------------
+        theme_group = QGroupBox("Built-in theme")
+        theme_row = QHBoxLayout(theme_group)
+        theme_row.addWidget(QLabel("Theme:"))
+        self._cb_theme = QComboBox()
+        self._cb_theme.addItems(list(_theme.BUILT_IN_THEMES.keys()))
+        idx = self._cb_theme.findText(current_theme_name)
+        if idx >= 0:
+            self._cb_theme.setCurrentIndex(idx)
+        self._cb_theme.setToolTip(_tip(
+            "Select a built-in theme.\n"
+            "Colours below will be reset to the theme's defaults."
+        ))
+        theme_row.addWidget(self._cb_theme, stretch=1)
+        load_btn = QPushButton("Load theme")
+        load_btn.setToolTip(_tip("Reset all colours to the selected built-in theme."))
+        load_btn.clicked.connect(self._on_load_theme)
+        theme_row.addWidget(load_btn)
+        layout.addWidget(theme_group)
+
+        # -- Per-widget colour overrides -------------------------------------
+        color_group = QGroupBox("Widget colours  (hex #RRGGBB or click swatch)")
+        scroll_content = QWidget()
+        form = QFormLayout(scroll_content)
+        form.setHorizontalSpacing(8)
+        form.setVerticalSpacing(6)
+
+        self._swatch_btns: dict[str, QPushButton] = {}
+        self._hex_edits: dict[str, QLineEdit] = {}
+
+        for key, label in _COLOR_ROLE_LABELS.items():
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+
+            swatch = QPushButton()
+            swatch.setFixedSize(28, 22)
+            swatch.setToolTip(_tip(f"Click to open colour picker for:\n{label}"))
+            self._update_swatch(swatch, self._working.get(key, "#808080"))
+            swatch.clicked.connect(lambda checked=False, k=key: self._on_pick_color(k))
+            self._swatch_btns[key] = swatch
+            row_layout.addWidget(swatch)
+
+            hex_ed = QLineEdit(self._working.get(key, "#808080"))
+            hex_ed.setFixedWidth(80)
+            hex_ed.setMaxLength(7)
+            hex_ed.setPlaceholderText("#RRGGBB")
+            hex_ed.setToolTip(_tip(
+                f"Type a hex colour for:\n{label}\nFormat: #RRGGBB"
+            ))
+            hex_ed.textEdited.connect(lambda text, k=key: self._on_hex_edited(k, text))
+            self._hex_edits[key] = hex_ed
+            row_layout.addWidget(hex_ed)
+
+            form.addRow(label + ":", row_widget)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll, stretch=1)
+
+        # -- Buttons ----------------------------------------------------------
+        button_row = QHBoxLayout()
+        apply_btn = QPushButton("Apply")
+        apply_btn.setToolTip(_tip("Apply the current colours to the window immediately."))
+        apply_btn.clicked.connect(self._on_apply)
+        button_row.addWidget(apply_btn)
+
+        dlg_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        dlg_buttons.accepted.connect(self._on_ok)
+        dlg_buttons.rejected.connect(self.reject)
+        button_row.addWidget(dlg_buttons)
+        layout.addLayout(button_row)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _update_swatch(btn: QPushButton, hex_color: str) -> None:
+        """Set the swatch button background to *hex_color*."""
+        btn.setStyleSheet(
+            f"background-color: {hex_color}; "
+            "border: 1px solid #808080;"
+        )
+
+    def _on_load_theme(self) -> None:
+        """Reset all working colours to the selected built-in theme."""
+        name = self._cb_theme.currentText()
+        builtin = _theme.BUILT_IN_THEMES.get(name)
+        if builtin is None:
+            return
+        self._theme_name = name
+        self._working = dict(builtin.colors)
+        # Update all swatch buttons and hex entries
+        for key in _COLOR_ROLE_LABELS:
+            color = self._working.get(key, "#808080")
+            self._update_swatch(self._swatch_btns[key], color)
+            self._hex_edits[key].setText(color)
+            self._hex_edits[key].setStyleSheet("")
+
+    def _on_pick_color(self, key: str) -> None:
+        """Open QColorDialog for *key* and update swatch + hex entry."""
+        current_hex = self._working.get(key, "#808080")
+        initial = QColor(current_hex)
+        picked = QColorDialog.getColor(initial, self, f"Choose colour — {_COLOR_ROLE_LABELS.get(key, key)}")
+        if picked.isValid():
+            hex_val = picked.name().upper()  # Qt returns #rrggbb; upper() for consistency
+            self._working[key] = hex_val
+            self._update_swatch(self._swatch_btns[key], hex_val)
+            self._hex_edits[key].setText(hex_val)
+            self._hex_edits[key].setStyleSheet("")
+
+    def _on_hex_edited(self, key: str, text: str) -> None:
+        """Validate and store a manually typed hex colour."""
+        normed = normalize_hex_color(text)
+        if normed is not None:
+            self._working[key] = normed
+            self._update_swatch(self._swatch_btns[key], normed)
+            self._hex_edits[key].setStyleSheet("")  # clear error highlight
+        else:
+            # Visual feedback: red border while the string is invalid
+            self._hex_edits[key].setStyleSheet("border: 2px solid red;")
+
+    def _on_apply(self) -> None:
+        """Apply current working colours to the main window without closing."""
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_apply_theme_colors"):
+            parent._apply_theme_colors(self._working, self._theme_name)
+
+    def _on_ok(self) -> None:
+        """Apply colours, persist them, then accept the dialog."""
+        self._on_apply()
+        prefs: dict[str, str] = {"__theme__": self._theme_name}
+        prefs.update(self._working)
+        save_theme_prefs(prefs)
+        self.accept()
+
+    # ------------------------------------------------------------------
+    # Public result accessors
+    # ------------------------------------------------------------------
+
+    def result_colors(self) -> dict[str, str]:
+        """Return the working colour mapping as configured by the user."""
+        return dict(self._working)
+
+    def result_theme_name(self) -> str:
+        """Return the selected built-in theme name."""
+        return self._theme_name
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -450,10 +708,25 @@ class MainWindow(QWidget):
     Fixed 235 x 385 px, centered, non-resizable.  Wired entirely to the pure
     ``unit_converter.core.converter`` API — no conversion math is implemented
     here.  Integrates history (UC-I07) and custom units (UC-I03).
+
+    All widget colours are driven by :mod:`unit_converter.gui.theme`; user
+    preferences are loaded from / persisted to
+    ``~/.unit-converter/gui_theme.json`` via
+    :mod:`unit_converter.gui.theme_persist`.
     """
 
     def __init__(self) -> None:
         super().__init__()
+
+        # --- Load and merge theme preferences --------------------------------
+        prefs = load_theme_prefs()
+        theme_name = prefs.pop("__theme__", _theme.DEFAULT_THEME_NAME)
+        builtin = _theme.BUILT_IN_THEMES.get(theme_name, _theme.LIGHT_THEME)
+        self._active_colors: dict[str, str] = merge_theme_colors(
+            builtin.colors, prefs
+        )
+        self._active_theme_name: str = theme_name
+
         self._setup_window()
 
         # --- Load database via the pure core (raises MagnitudeDataError on failure) ---
@@ -491,6 +764,9 @@ class MainWindow(QWidget):
         self._connect_signals()
         self._setup_shortcuts()
 
+        # Apply the loaded theme to all widgets now that they exist
+        _theme.apply_colors_to_main_window(self, self._active_colors)
+
     # ------------------------------------------------------------------
     # Window setup
     # ------------------------------------------------------------------
@@ -518,7 +794,26 @@ class MainWindow(QWidget):
         if os.path.isfile(logo):
             self.setWindowIcon(QIcon(logo))
 
-        self.setStyleSheet(f"background-color: {_BG_MAIN};")
+        self.setStyleSheet(_theme.build_main_window_stylesheet(self._active_colors))
+
+    # ------------------------------------------------------------------
+    # Theme application (called on startup and on Settings change)
+    # ------------------------------------------------------------------
+
+    def _apply_theme_colors(
+        self,
+        colors: dict[str, str],
+        theme_name: str,
+    ) -> None:
+        """
+        Apply *colors* to all widgets and store the active state.
+
+        Called both on startup (from ``__init__``) and when the Settings
+        dialog applies or accepts.
+        """
+        self._active_colors = colors
+        self._active_theme_name = theme_name
+        _theme.apply_colors_to_main_window(self, colors)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -532,9 +827,9 @@ class MainWindow(QWidget):
         # ---- Magnitude label + combo ----
         self._lab_mag = QLabel("Magnitude")
         self._lab_mag.setAlignment(Qt.AlignCenter)
+        # Initial stylesheet; will be overridden by apply_colors_to_main_window
         self._lab_mag.setStyleSheet(
-            f"background-color: {_BG_TITLE}; color: {_FG_TITLE}; "
-            f"{_FONT_TITLE} border: 2px solid #888888; padding: 5px;"
+            _theme.build_magnitude_label_stylesheet(self._active_colors)
         )
         layout.addWidget(self._lab_mag)
 
@@ -543,13 +838,11 @@ class MainWindow(QWidget):
         self._cb_magnitude.setCurrentIndex(0)
         self._cb_magnitude.setEnabled(True)
         self._cb_magnitude.setStyleSheet(
-            "background-color: #e6e6e6; "
-            "font-family: TimesNewRoman, Times New Roman; font-size: 12pt; "
-            "padding: 4px;"
+            _theme.build_combo_stylesheet(self._active_colors)
         )
-        self._cb_magnitude.setToolTip(
+        self._cb_magnitude.setToolTip(_tip(
             "List of magnitudes added to the application."
-        )
+        ))
         layout.addWidget(self._cb_magnitude)
 
         # ---- From section ----
@@ -582,21 +875,25 @@ class MainWindow(QWidget):
 
         lab = QLabel(label_text)
         lab.setStyleSheet(
-            f"background-color: {_BG_MAIN}; color: {_FG_MAIN}; {_FONT_TEXT}; "
-            "border: 2px solid #aaaaaa; padding: 5px;"
+            _theme.build_header_label_stylesheet(self._active_colors)
         )
         row.addWidget(lab)
+
+        # Store From:/To: label references for restyles
+        if label_text.startswith("From"):
+            self._lab_from = lab
+        else:
+            self._lab_to = lab
 
         row.addStretch(1)
 
         val_lab = QLabel("{:.1e}".format(0.0))
         val_lab.setAlignment(Qt.AlignCenter)
         val_lab.setStyleSheet(
-            f"background-color: {_BG_MAIN}; color: {_FG_MAIN}; {_FONT_VAL}; "
-            "border: 2px solid #aaaaaa; padding: 5px;"
+            _theme.build_header_label_stylesheet(self._active_colors)
         )
         val_lab.setFixedWidth(90)
-        val_lab.setToolTip("Actual total value in scientific notation.")
+        val_lab.setToolTip(_tip("Actual total value in scientific notation."))
 
         if label_text.startswith("From"):
             self._lab_val1 = val_lab
@@ -614,13 +911,13 @@ class MainWindow(QWidget):
         order_lab = _OrderLabel(
             on_change=lambda: self._unit_converter(1),
         )
+        # Apply current active theme immediately (overrides the default light)
+        order_lab.restyle(self._active_colors)
 
         unit_cb = QComboBox()
         unit_cb.setEnabled(False)
         unit_cb.setStyleSheet(
-            "background-color: #e6e6e6; "
-            "font-family: TimesNewRoman, Times New Roman; font-size: 11pt; "
-            "padding: 3px;"
+            _theme.build_unit_combo_stylesheet(self._active_colors)
         )
 
         if slot == 1:
@@ -641,11 +938,14 @@ class MainWindow(QWidget):
         row.setSpacing(6)
 
         sweep = _SweepLabel()
+        sweep.restyle(self._active_colors)
+
         entry = _NumEntry(
             sweep_label=sweep,
             on_change=self._unit_converter,
             slot=slot,
         )
+        entry.restyle(self._active_colors)
 
         if slot == 1:
             self._sweep1 = sweep
@@ -691,13 +991,17 @@ class MainWindow(QWidget):
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
+        settings_action = menu.addAction("Settings...")
+        menu.addSeparator()
         history_action = menu.addAction("History / Favorites...")
         add_unit_action = menu.addAction("Add Custom Unit...")
         menu.addSeparator()
         about_action = menu.addAction("About...")
         exit_action = menu.addAction("Exit")
         action = menu.exec(event.globalPos())
-        if action == history_action:
+        if action == settings_action:
+            self._show_settings()
+        elif action == history_action:
             self._show_history()
         elif action == add_unit_action:
             self._show_add_unit()
@@ -706,9 +1010,20 @@ class MainWindow(QWidget):
         elif action == exit_action:
             self._exit()
 
+    def _show_settings(self) -> None:
+        """Open the Settings dialog (TASK 2)."""
+        dlg = _SettingsDialog(
+            current_colors=self._active_colors,
+            current_theme_name=self._active_theme_name,
+            parent=self,
+        )
+        dlg.exec()
+        # If the user clicked Ok, _on_ok already applied + persisted; if Cancel
+        # or Apply was used, the live state is already updated via _apply_theme_colors.
+
     def _show_history(self) -> None:
         """Open the history/favorites dialog (UC-I07)."""
-        dlg = _HistoryDialog(self)
+        dlg = _HistoryDialog(self, colors=self._active_colors)
         if dlg.exec() == QDialog.Accepted:
             entry = dlg.selected_entry()
             if entry is not None:
@@ -736,7 +1051,7 @@ class MainWindow(QWidget):
     def _show_add_unit(self) -> None:
         """Open the add-custom-unit dialog (UC-I03 GUI)."""
         mag_names = [m for m in self._magnitude_names if m != "*Select magnitude*"]
-        dlg = _AddUnitDialog(mag_names, self)
+        dlg = _AddUnitDialog(mag_names, self, colors=self._active_colors)
         if dlg.exec() == QDialog.Accepted:
             # Reload the database so the new unit appears
             _core.reload_database()

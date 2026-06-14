@@ -363,6 +363,8 @@ REST contract above exactly.
 | `delete_history` | `DELETE /history` | Clear all history |
 | `post_add_custom_unit` | `POST /units/custom` | Add a custom unit |
 
+**State-changing tools** (mutations): `post_refresh_rates`, `post_record_conversion`, `post_add_favorite`, `delete_history`, `post_add_custom_unit`.
+
 ---
 
 ## Example calls

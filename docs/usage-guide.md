@@ -20,6 +20,15 @@ units, history and favorites, custom units, and how to extend the unit database.
 11. [Supported magnitudes](#supported-magnitudes)
 12. [Extending the unit database](#extending-the-unit-database)
 
+**GUI-specific subsections:**
+- [Hover tooltips](#hover-tooltips)
+- [Changing the order of magnitude](#changing-the-order-of-magnitude)
+- [Digit sweep](#digit-sweep)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Context menu](#context-menu)
+- [Settings and theming](#settings-and-theming) — NEW: Light/Dark themes, per-widget color picker
+- [Input clamping](#input-clamping)
+
 ---
 
 ## Using the PySide6 GUI
@@ -81,7 +90,52 @@ the sweep control is focused. Click to reset to `...`.
 
 ### Context menu
 
-Right-click the title-bar area for About and Exit options.
+Right-click anywhere in the main window to open a context menu with the following options:
+
+1. **Settings...** — Opens the Settings dialog for theme selection and per-widget color picker.
+2. **History / Favorites...** — Opens the conversion history panel to view, re-use, and manage favorite conversions.
+3. **Add Custom Unit...** — Opens the custom unit dialog to define and persist user-defined units.
+4. **About...** — Displays application information (author, version, license).
+5. **Exit** — Closes the application (equivalent to Ctrl+Q).
+
+### Settings and theming
+
+The GUI supports Light and Dark themes with customizable per-widget colors. Access the Settings dialog by right-clicking the main window and selecting **"Settings..."**.
+
+#### Theme selection
+
+- **Built-in themes:** Choose from "Light" (cool neutral grey + blue accent) or "Dark" (dark blue-grey + warm amber accent).
+- **Load theme button:** Click to reset all colors to the selected built-in theme's defaults.
+
+#### Per-widget color picker
+
+The Settings dialog displays 11 semantic color roles that control the appearance of different widget types:
+
+| Color role | Usage |
+|-----------|-------|
+| `bg_main` | Main window and frame background |
+| `bg_title` | Title/header label strips |
+| `bg_entry` | Numeric entry field background |
+| `bg_sweep` | Digit-sweep control background |
+| `bg_combo` | Magnitude and unit dropdown backgrounds |
+| `bg_dialog` | Dialog window backgrounds |
+| `fg_title` | Title/header text (accent color) |
+| `fg_main` | Body label and general text foreground |
+| `fg_entry` | Entry field text foreground |
+| `border_main` | General control border color |
+| `border_heavy` | Thicker ridge border (order label, entry) |
+
+For each color role, you can:
+
+1. **Click the color swatch button** to open the color picker dialog (Office-style palette) and visually select a color.
+2. **Type a hex color directly** in the text field (format: `#RRGGBB`, e.g. `#FF0000` for red). Invalid hex strings are highlighted with a red border for visual feedback.
+3. **Click "Apply"** to see your changes immediately without closing the Settings dialog.
+4. **Click "OK"** to apply your changes, persist them, and close the dialog.
+5. **Click "Cancel"** to discard changes and close the dialog.
+
+#### Persistence
+
+Theme selection (Light/Dark) and all color overrides are persisted to `~/.unit-converter/gui_theme.json` and are automatically restored when you launch the application again.
 
 ### Input clamping
 

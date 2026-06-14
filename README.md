@@ -113,14 +113,22 @@ unit-converter-gui
 Launches the PySide6 desktop application. Requires the `[gui]` optional group.
 Equivalent invocation from source: `python -m unit_converter.gui.app`.
 
+**Features:** Bidirectional live conversion, order-of-magnitude prefixes (SI/IEC), digit sweep, conversion history and favorites, custom units, right-click context menu (Settings, History, Add Custom Unit, About, Exit), and Light/Dark theming with per-widget color picker. See [docs/usage-guide.md](docs/usage-guide.md) for detailed usage.
+
 ### REST + MCP server (Streamable HTTP)
 
 ```bash
 unit-converter-api
 ```
 
-Starts the combined FastAPI REST + FastMCP server via uvicorn on `0.0.0.0:8000`.
+Starts the combined FastAPI REST + FastMCP server via uvicorn on `127.0.0.1:8000` (loopback only, local access).
 Requires the `[api]` optional group.
+
+To expose the server to other machines on the network, override the host:
+
+```bash
+unit-converter-api --host 0.0.0.0
+```
 
 | Surface | URL |
 |---------|-----|
@@ -129,7 +137,11 @@ Requires the `[api]` optional group.
 | MCP (Streamable HTTP) | http://localhost:8000/mcp |
 | Health check | http://localhost:8000/health |
 
-Equivalent invocation: `uvicorn unit_converter.api.main:app --host 0.0.0.0 --port 8000`
+Equivalent invocation (default): `uvicorn unit_converter.api.main:app --host 127.0.0.1 --port 8000`
+
+Equivalent invocation (network access): `uvicorn unit_converter.api.main:app --host 0.0.0.0 --port 8000`
+
+See [docs/agent-access.md](docs/agent-access.md) for REST endpoint reference and example calls.
 
 ### MCP server over stdio (for CLI / local agent clients)
 
@@ -139,7 +151,10 @@ unit-converter-mcp
 
 Runs the MCP server over stdio. Suitable for Claude Desktop and other MCP-aware CLI tools.
 Requires the `[api]` optional group.
+
 Equivalent invocation: `python -m unit_converter.api.mcp_server`
+
+Configure Claude Desktop or other MCP clients as shown in [docs/agent-access.md § stdio](docs/agent-access.md#stdio-mcp-only).
 
 ---
 
