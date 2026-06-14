@@ -46,6 +46,7 @@ from PySide6.QtGui import (
     QDoubleValidator,
     QIcon,
     QKeySequence,
+    QShortcut,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -60,7 +61,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QShortcut,
     QVBoxLayout,
     QWidget,
 )

@@ -257,7 +257,7 @@ class ClearedResponse(BaseModel):
 
 def _value_error_to_422(exc: ValueError) -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=str(exc),
     )
 

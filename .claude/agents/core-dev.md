@@ -87,4 +87,4 @@ Assistant: UC-B05 — acceptance: `m4→m⁴`, `m22→m²²`, `H2O`/`unit1` unch
 - Repo ground truth: `core/converter.py`, `core/data_loader.py`, `core/{expr,rates,history}.py`, `data/magnitudes.toml`.
 - `.claude/instructions/ai-execution-discipline.md`, `.claude/instructions/python-repo-conventions.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (core slice).
+- Focused agent for the core slice.

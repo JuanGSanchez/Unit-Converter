@@ -82,4 +82,4 @@ Assistant: Verifying legacy vs canonical names: read `magnitudes.toml` header an
 - Verification: `api/{service,rest}.py`, `core/converter.py`, `data/magnitudes.toml`.
 - `.claude/instructions/ai-execution-discipline.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (docs slice).
+- Focused agent for the docs slice.

@@ -104,4 +104,4 @@ Assistant: `delete_history` is destructive and irreversible — it removes all r
 - Repo ground truth: `unit_converter/api/{service,rest,mcp_server}.py`, `core/converter.py` (sig_figs, clamp, IncompatibleUnitsError), `core/{rates,expr,history}.py`.
 - `.claude/instructions/ai-execution-discipline.md` (context-budget + stop-and-confirm discipline).
 - references/claude.md §AGENT + Claude Code subagent frontmatter (`name`, `description`, `tools`).
-- Refined 2026-06-13: 4→16 operations, destructive-op confirm guard, error-code mapping, role split across the new dev agents (replaces the single maintainer reference).
+- Refined 2026-06-13: 4→16 operations, destructive-op confirm guard, error-code mapping, role split across the new dev agents.

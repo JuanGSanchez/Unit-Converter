@@ -83,4 +83,4 @@ Assistant: UC-B06 — acceptance: smoke tests run on 3.13 with no event-loop Dep
 - `tests/*` (all suites), `docs/agent-operating-doc.md` (MCP tool-name contract).
 - `.claude/instructions/ai-execution-discipline.md`, `.claude/instructions/python-repo-conventions.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (test/gate slice).
+- Focused agent for the test/gate slice.

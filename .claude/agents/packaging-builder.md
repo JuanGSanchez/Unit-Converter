@@ -83,4 +83,4 @@ Assistant: UC-B02 — acceptance: `git status --ignored` shows `packaging/bin/` 
 - `packaging/UConverter.spec`, `packaging/build.py`, `.gitignore`.
 - `.claude/instructions/ai-execution-discipline.md`, `.claude/instructions/python-repo-conventions.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (packaging slice).
+- Focused agent for the packaging slice.

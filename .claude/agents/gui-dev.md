@@ -77,4 +77,4 @@ Assistant: UC-B03 — acceptance: a forced unknown-unit/order logs an error and 
 - `unit_converter/gui/main_window.py` (handlers, tooltips), `gui/app.py`.
 - `.claude/instructions/ai-execution-discipline.md`, `.claude/instructions/python-repo-conventions.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (GUI slice).
+- Focused agent for the GUI slice.

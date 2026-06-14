@@ -305,6 +305,7 @@ On a 422 / `isError: true` response:
   point and is not driven via the API.
 - **The database** (`unit_converter/data/magnitudes.toml`) — agents read units through
   `get_units`; the shipped database is not writable via the API (use `POST /units/custom`
-  for runtime additions, or the `unit-converter-maintainer` agent for database edits).
+  for runtime additions, or the `core-dev` agent / `add-unit-or-magnitude` skill for edits
+  to the shipped `magnitudes.toml`).
 - **The packaging build** (`packaging/`) — the PyInstaller executable is a build artifact,
   not an agent-accessible surface.

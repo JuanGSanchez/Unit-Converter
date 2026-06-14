@@ -2,8 +2,8 @@
 
 A small, factor-based unit-conversion app. One pure core powers a PySide6 GUI, a
 dual FastAPI (REST) + FastMCP access layer, and a PyInstaller build. This file is
-the always-loaded ground truth for any Claude agent working here; the two in-repo
-subagents below own the actual work.
+the always-loaded ground truth for any Claude agent working here; the in-repo
+agent suite below owns the actual work.
 
 ## Principles Applied
 - P1 Source-of-Truth Grounding — architecture and commands below are verified
@@ -27,13 +27,18 @@ subagents below own the actual work.
 - **Access layer (one shared core, two transports)** —
   `unit_converter/api/service.py` (shared), `rest.py` (FastAPI; maps `ValueError`
   → HTTP 422 via `_value_error_to_422`), `mcp_server.py` (FastMCP `from_fastapi`,
-  deriving the four tool names `health`, `get_magnitudes`, `get_units`,
-  `post_convert` from FastAPI operation ids), `main.py` (`run_server`). Read-only /
-  compute-only: exactly those four operations, no writes.
+  deriving 16 MCP tool names from the FastAPI operation ids), `main.py`
+  (`run_server`). 16 operations span discovery, convert, compound, currency,
+  history, and custom units — including a small set of state-changing operations
+  (currency rate refresh, history/favorites record + clear, add custom unit), so
+  it is NOT read-only. The authoritative tool-name list is `_EXPECTED_TOOL_NAMES_16`
+  in `tests/test_api_routes.py`.
 - **GUI** — `unit_converter/gui/` (PySide6). Separate from core; not agent-driven.
 - **Packaging** — `packaging/UConverter.spec`, `packaging/build.py` (PyInstaller).
 - **Tests** — `tests/test_converter.py`, `tests/test_data_loader.py`,
-  `tests/test_api_smoke.py`.
+  `tests/test_api_smoke.py`, `tests/test_api_routes.py` (16-route / 16-tool-name
+  suite), `tests/test_expr.py`, `tests/test_history.py`, `tests/test_rates.py`,
+  `tests/test_service_validation.py`.
 
 ## Invariants (do not break these)
 1. Core has no Tkinter/Qt/PySide imports.
@@ -45,8 +50,10 @@ subagents below own the actual work.
 4. The PyInstaller spec keeps building (datas + hidden imports stay valid).
 5. The `core/`-scoped pytest coverage gate stays green at ≥90%. The gate is
    scoped via `[tool.coverage.run] source=["unit_converter"]` with `gui/`,
-   `api/`, `data/`, `.pyw` omitted. A `fail_under` threshold is currently MISSING
-   in `pyproject.toml` (backlog UC-B04) — restoring/holding it is gate discipline.
+   `api/`, `data/`, `.pyw` omitted. The `fail_under = 90` threshold is now enforced
+   in `pyproject.toml` in both places — `[tool.coverage.report] fail_under = 90`
+   and `--cov-fail-under=90` in `[tool.pytest.ini_options] addopts` (UC-B04
+   resolved) — holding it green is gate discipline.
 6. Never commit secrets or build artifacts (`packaging/bin/`, `packaging/work/`,
    `dist/`, `build/`).
 7. Commits land on the enhancement branch, never `main`/`master`.
@@ -77,7 +84,7 @@ subagents below own the actual work.
   safety, secrets/artifacts, coverage; returns PASS/FAIL. Authors no fix.
 
 Role split: operator OPERATES the service; the dev agents EDIT their subsystem; reviewer GATES.
-The former single `unit-converter-maintainer` is decomposed into core/gui/access/test/packaging/docs.
+The roster is split by subsystem: core/gui/access/test/packaging/docs.
 
 ### Instructions (`.claude/instructions/`) — agents reference these, don't restate them
 - **ai-execution-discipline.md** — anti-programmatic guardrails shared by all agents:

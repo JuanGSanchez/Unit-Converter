@@ -88,4 +88,4 @@ Assistant: `post_refresh_rates` is STATE-CHANGING and network-touching — F4 to
 - `unit_converter/api/{service,rest,mcp_server,main}.py`.
 - `.claude/instructions/ai-execution-discipline.md`, `.claude/instructions/python-repo-conventions.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- Decomposed 2026-06-13 from `unit-converter-maintainer` (access slice).
+- Focused agent for the access slice.

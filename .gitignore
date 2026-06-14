@@ -42,6 +42,14 @@ coverage-report/
 # Legacy Tkinter UI file (superseded by the PySide6 GUI in unit_converter/gui/):
 UConverter_UI.pyw
 
+# Claude Code session scratch (local AI working files — NOT project assets).
+# The shared AI assets under .claude/ (agents, hooks, instructions, skills,
+# settings.json) ARE tracked; only per-session scratch and personal overrides
+# below are ignored.
+claude-checkpoint-*.md
+subagent-report-*.md
+.claude/settings.local.json
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

@@ -43,4 +43,3 @@ execution and protects the context budget. Scope: every code/data/test/doc/build
 ## Sources
 - `CLAUDE.md` (repo invariants, gate commands), `docs/BACKLOG.md` (item IDs, stale-line policy).
 - references/claude.md §INSTRUCTION: XML/markdown directive structure, negative-instruction patterns.
-- Decomposed from the prior `unit-converter-maintainer` agent's C2 Verify-Before-Edit + context rules.

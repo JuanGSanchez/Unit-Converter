@@ -10,6 +10,11 @@
   tags name what an in-repo coding agent (the `unit-conversion-operator` / generation agents) must
   be able to do — they verify the agent asset's capability surface.
 
+Status markers (added 2026-06-14 by docs-writer): each item carries a `Status:` line.
+DONE items were verified against the live code/config on that date; UNVERIFIED items were
+not re-inspected in that pass and need owner confirmation. Item content is preserved
+unchanged (IDs are stable per this file's convention).
+
 How to use this backlog: every item is self-contained and pick-up-cold ready. IDs are stable.
 Section 1 is ordered by severity (fix first). Section 2 is ordered by value/effort (do the
 high-value/low-effort items first). Line references are against the reviewed branch and should be
@@ -20,6 +25,7 @@ re-confirmed before editing (code may have shifted).
 ## SECTION 1 — BUGS & FIXES (ordered by severity)
 
 ### UC-B01 — Invalid PEP 517 build backend blocks install/build
+- Status: DONE (verified 2026-06-14 — `pyproject.toml:3` is `build-backend = "setuptools.build_meta"`)
 - Severity: **HIGH**
 - File:line: `pyproject.toml:3`
 - Root cause: `build-backend = "setuptools.backends.legacy:build"` is not a real setuptools entry
@@ -34,6 +40,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **fix pyproject build config** (edit `[build-system]` in `pyproject.toml`).
 
 ### UC-B02 — Committed PyInstaller build artifacts on the branch
+- Status: DONE (verified 2026-06-14 — `packaging/bin/` and `packaging/work/` are in `.gitignore` and untracked)
 - Severity: **MED**
 - File:line: `packaging/bin/UConverter/_internal/...`, `packaging/work/UConverter/warn-UConverter.txt`
   (review Gap G7, §D)
@@ -48,6 +55,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit .gitignore + untrack build output** (no compiled artifacts tracked).
 
 ### UC-B03 — GUI swallows all ValueError/ZeroDivisionError as 0.0
+- Status: DONE (verified 2026-06-14) — blanket `except (ValueError, ZeroDivisionError): result = 0.0` replaced by a narrow `except ValueError` that logs via `logger.error` and surfaces `"error"` in the result label (no silent 0.0); clamp-to-zero for negative/inf inputs is handled separately before conversion. See `gui/main_window.py` ~865-882 and ~920-937.
 - Severity: **MED**
 - File:line: `unit_converter/gui/main_window.py:692-693` and `725-726`
 - Root cause: blanket `except (ValueError, ZeroDivisionError): result = 0.0` masks genuine
@@ -63,6 +71,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit GUI error handling + add logging** (narrow except + logger).
 
 ### UC-B04 — Coverage gate (≥90%) documented but not machine-enforced
+- Status: DONE (verified 2026-06-14 — `[tool.coverage.report] fail_under = 90` and pytest `addopts` `--cov-fail-under=90` both present; suite 272 passed / 1 skipped, gate green)
 - Severity: **MED**
 - File:line: `pyproject.toml` `[tool.pytest.ini_options]` / `[tool.coverage]` (review Gap G6, §D);
   coverage scope already set at `pyproject.toml:74-84`
@@ -76,6 +85,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **fix pyproject test/coverage config** (add fail_under gate).
 
 ### UC-B05 — `_apply_superscripts` converts only a single trailing 2/3
+- Status: DONE (verified 2026-06-14 — `data_loader._apply_superscripts` now maps any trailing digit run, e.g. `m4 -> m⁴`, `m22 -> m²²`, while leaving `H2O`/`unit1` intact)
 - Severity: **LOW**
 - File:line: `unit_converter/core/data_loader.py:151-179`
 - Root cause: the helper rewrites only one trailing `2`/`3` (end-of-string or just before `)`).
@@ -90,6 +100,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit core data_loader + extend pytest cases** (superscript normalizer).
 
 ### UC-B06 — Deprecated `asyncio.get_event_loop().run_until_complete` in smoke tests
+- Status: DONE (verified 2026-06-14 — no `get_event_loop` in any test source; `tests/test_api_smoke.py` uses `asyncio.run`)
 - Severity: **LOW**
 - File:line: `tests/test_api_smoke.py:60, 78, 152`
 - Root cause: `get_event_loop()` with no running loop is deprecated on Python 3.12+ (can raise on
@@ -101,6 +112,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit pytest async tests** (modernize asyncio usage).
 
 ### UC-B07 — MCP tool-name assertion too loose to catch real route-id/name mismatch
+- Status: DONE (verified 2026-06-14 — `tests/test_api_routes.py::test_mcp_tool_exact_names_16` asserts the exact full tool-name set; the loose smoke test is marked superseded)
 - Severity: **LOW**
 - File:line: `tests/test_api_smoke.py:154`
 - Root cause: the smoke test only asserts a tool name *containing* `magnitude`/`list`, so a real
@@ -114,6 +126,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit pytest MCP assertion** (exact tool-name contract check).
 
 ### UC-B08 — Default bind `0.0.0.0` for a single-user local compute service
+- Status: DONE (verified 2026-06-14 — `api/main.py:run_server` defaults `host="127.0.0.1"` with a `host` override param documenting `0.0.0.0` for LAN)
 - Severity: **LOW / advisory**
 - File:line: `unit_converter/api/main.py:85` (`run_server`)
 - Root cause: server binds all interfaces by default; mild exposure for a single-user local tool
@@ -125,6 +138,7 @@ re-confirmed before editing (code may have shifted).
 - Asset capability needed: **edit access-layer server config** (bind default + arg).
 
 ### UC-B09 — Legacy `Magnitudes.txt` vs TOML unit-name drift (silent rename)
+- Status: DONE (verified 2026-06-14 — legacy→canonical mapping documented in `unit_converter/data/README.md` and in the `magnitudes.toml` header; TOML named as source of truth. Documentation route taken, no alias map in loader)
 - Severity: **LOW**
 - File:line: data layer — `unit_converter/data/magnitudes.toml` vs legacy `Magnitudes.txt`
   (review §D last item)
@@ -149,6 +163,7 @@ free-form expression parser, units-aware NumPy/Pandas integration, interval arit
 auto-simplification.
 
 ### UC-I01 — Significant-figures / precision control
+- Status: DONE (verified 2026-06-14 — `convert(..., sig_figs=...)` with positive-int validation and `_round_sig_figs` helper in `core/converter.py`; threaded through service/REST)
 - Value/Effort: **High / S**
 - What it adds: an optional `sig_figs` (or `precision`) parameter on `convert` that rounds the result
   to N significant digits, with a sane default preserving current behavior.
@@ -168,6 +183,7 @@ auto-simplification.
 - Asset capability needed: **edit core converter + thread param through MCP tool + REST route + add pytest cases**.
 
 ### UC-I02 — Dimensional-compatibility guard between magnitudes
+- Status: DONE (verified 2026-06-14 — typed `IncompatibleUnitsError(ValueError)` raised in `core/converter.py` for unknown/cross-magnitude units)
 - Value/Effort: **High / S**
 - What it adds: explicit rejection of conversions whose source and target units belong to different
   magnitudes (dimensions), with a clear error rather than a silent factor-ratio.
@@ -188,6 +204,7 @@ auto-simplification.
 - Asset capability needed: **edit core converter (typed validation) + map error in REST route + add pytest cases**.
 
 ### UC-I03 — User-defined custom units (persisted)
+- Status: DONE (verified 2026-06-14 — `data_loader.load_custom_units` merges `~/.unit-converter/custom.toml`; tests in `tests/test_data_loader.py`)
 - Value/Effort: **High / M**
 - What it adds: ability to add custom units (name + factor, under an existing magnitude) persisted to
   a user data file so they survive restart and are visible via the GUI and API.
@@ -214,6 +231,7 @@ auto-simplification.
 - Asset capability needed: **extend units data file + edit core data_loader (user-file merge) + (optional, gated) add MCP tool + REST route + add pytest cases**.
 
 ### UC-I04 — Affine/offset temperature magnitude (absolute vs increment)
+- Status: DONE (verified 2026-06-14 — `Temperature` (with `[Temperature.offsets]`) and scale-only `Temperature_delta` in `magnitudes.toml`; affine path in `core/converter.py`)
 - Value/Effort: **High / M**
 - What it adds: a Temperature magnitude with correct absolute conversion (offset + scale, e.g.
   °C/°F/K) distinguished from temperature increments (scale-only), without breaking the existing
@@ -239,6 +257,7 @@ auto-simplification.
 - Asset capability needed: **edit core converter (affine math) + extend units data file (offset schema) + edit data_loader + add pytest cases**.
 
 ### UC-I05 — Live currency conversion with auto-updating rates (API-fronted)
+- Status: DONE (verified 2026-06-14 — `core/rates.py` (fetch/cache/staleness/offline fallback) wired into `api/service.py` with refresh op; `currency_snapshot.json` cache; tests in `tests/test_rates.py`)
 - Value/Effort: **Med / L**
 - What it adds: a Currency "magnitude" whose factors are exchange rates fetched from a rates source,
   refreshable manually or on an interval, keyed by ISO 4217 codes.
@@ -263,6 +282,7 @@ auto-simplification.
 - Asset capability needed: **add core rates module + extend units data file + add MCP tool + REST route (state-changing, gated) + add HTTP dependency in pyproject + add pytest cases**. (Also requires a RESEARCH REQUEST — see below.)
 
 ### UC-I06 — Compound / derived unit parsing (limited, no full expression engine)
+- Status: DONE (verified 2026-06-14 — `core/expr.py` parses `* / ^` compounds with dimension vectors and typed errors; tests in `tests/test_expr.py`)
 - Value/Effort: **Med / L**
 - What it adds: parse simple compound units (products/quotients/powers of existing base units, e.g.
   `N*m`, `km/h`) so derived conversions work without per-pair tables.
@@ -283,6 +303,7 @@ auto-simplification.
 - Asset capability needed: **add core expression parser + edit core converter (dimension composition) + extend data_loader (dimension vectors) + edit REST route + add pytest cases**. Depends on UC-I02.
 
 ### UC-I07 — Conversion history / favorites (local presets)
+- Status: DONE (verified 2026-06-14 — `core/history.py` (`record`, `load_history`, favorites) with GUI history panel; tests in `tests/test_history.py`)
 - Value/Effort: **Low / S**
 - What it adds: persist recent conversions and let the user re-run/favorite them in the GUI.
 - Why: nice UX polish, cheap, but lowest-confidence (inferred from calculator UX, not a discrete

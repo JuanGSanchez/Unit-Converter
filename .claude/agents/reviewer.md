@@ -86,4 +86,4 @@ Assistant: I don't rubber-stamp. Give me the changed files or the item ID; I'll 
 - Anchors: `core/converter.py`, `api/{service,rest,main}.py`, `tests/test_api_smoke.py`.
 - `.claude/instructions/ai-execution-discipline.md`.
 - references/claude.md §AGENT + Claude Code subagent frontmatter.
-- New cross-cutting role added 2026-06-13 (no equivalent in the prior maintainer pair).
+- New cross-cutting role added 2026-06-13.
