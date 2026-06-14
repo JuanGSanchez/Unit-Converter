@@ -21,7 +21,10 @@ Run commands
 ------------
 HTTP server (REST + MCP Streamable HTTP)::
 
-    uvicorn unit_converter.api.main:app --host 0.0.0.0 --port 8000
+    uvicorn unit_converter.api.main:app --host 127.0.0.1 --port 8000
+
+(``--host 127.0.0.1`` is loopback-only, matching the default bind; pass
+``--host 0.0.0.0`` only to expose the server on all network interfaces.)
 
 or via the ``unit-converter-api`` console script::
 

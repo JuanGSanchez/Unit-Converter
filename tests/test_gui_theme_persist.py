@@ -480,3 +480,41 @@ class TestBuildDialogStylesheet:
         assert pyside_modules == [], (
             f"PySide6 was pulled in as a side-effect of theme: {pyside_modules}"
         )
+
+
+# =========================================================================
+# Hover-tooltip invariant lock  (Qt-free: source-text scan only)
+# Guards the repo's tooltip invariant — every interactive control keeps its
+# hover tooltip. We assert the count of setToolTip(...) calls in the GUI does
+# not regress below the established floor, without importing PySide6.
+# =========================================================================
+
+# Floor established after the Light/Dark theming + Settings pass.
+_MIN_SETTOOLTIP_CALLS = 19
+
+
+def _main_window_source() -> str:
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "main_window.py"
+    )
+    return src.read_text(encoding="utf-8")
+
+
+class TestTooltipInvariant:
+    """The GUI must keep its hover tooltips (CLAUDE.md GUI tooltip invariant).
+    Counted by scanning the source text so no Qt/display is required."""
+
+    def test_setooltip_count_does_not_regress(self) -> None:
+        count = _main_window_source().count("setToolTip(")
+        assert count >= _MIN_SETTOOLTIP_CALLS, (
+            f"setToolTip( count regressed: found {count}, "
+            f"expected >= {_MIN_SETTOOLTIP_CALLS}. A hover tooltip was dropped."
+        )
+
+    def test_no_pyside6_imported_by_this_scan(self) -> None:
+        # The invariant check is pure text scanning — Qt must not be imported.
+        pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
+        assert pyside_modules == [], (
+            f"PySide6 was pulled in unexpectedly: {pyside_modules}"
+        )
