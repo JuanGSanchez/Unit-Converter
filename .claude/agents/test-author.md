@@ -7,6 +7,7 @@ description: >
   coverage gate config (UC-B04), or diagnose a failing/under-covered suite. Owns test correctness and
   the gate, not production code — pairs with core-dev/access-dev/gui-dev who author the change.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-sonnet-4-6
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

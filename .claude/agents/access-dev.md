@@ -9,6 +9,7 @@ description: >
   state-changing endpoint (UC-I03/UC-I05, gated), or fix bind/exposure (UC-B08). NOT for core math,
   GUI, packaging, or running conversions.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-sonnet-4-6
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

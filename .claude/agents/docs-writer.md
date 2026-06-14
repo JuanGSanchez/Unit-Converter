@@ -7,6 +7,7 @@ description: >
   and the docs/agent contract must follow (UC-I01..UC-I06, UC-B09 canonical-name mapping). Owns docs
   accuracy, not the code change itself — pairs with the dev agents.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-haiku-4-5-20251001
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

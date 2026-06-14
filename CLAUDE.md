@@ -67,6 +67,10 @@ agent suite below owns the actual work.
 ## AI asset suite (single source of truth — use these; don't do their jobs ad hoc)
 
 ### Agents (`.claude/agents/`)
+- **orchestrator** — plans multi-subsystem work, decomposes it into bounded single-owner tasks, and
+  dispatches the specialist agents below as subagents (Task tool), then gates every applied change
+  through reviewer. Coordinates and gates; holds no Edit/Write — never edits files itself. Requires
+  Claude Code ≥ v2.1.172 (nested subagents); else it emits a dispatch plan for the top-level session.
 - **unit-conversion-operator** — drives the RUNNING service via the 16-op MCP/REST access layer
   (no GUI): convert, compound, currency, history, custom units, discovery. Operates, never edits.
 - **core-dev** — headless conversion core: `magnitudes.toml`, factors, ratio/affine math, prefixes,
@@ -83,8 +87,16 @@ agent suite below owns the actual work.
 - **reviewer** — read-only correctness + security/boundary gate: verifies the 7 invariants, surface
   safety, secrets/artifacts, coverage; returns PASS/FAIL. Authors no fix.
 
-Role split: operator OPERATES the service; the dev agents EDIT their subsystem; reviewer GATES.
-The roster is split by subsystem: core/gui/access/test/packaging/docs.
+Role split: orchestrator COORDINATES (dispatches + gates, never edits); operator OPERATES the
+service; the dev agents EDIT their subsystem; reviewer GATES. The roster is split by subsystem:
+core/gui/access/test/packaging/docs.
+
+Model assignment (per-agent `model:` frontmatter, capability-tiered): **Opus 4.8**
+(`claude-opus-4-8`) — orchestrator, reviewer (coordination + judgment gate). **Sonnet 4.6**
+(`claude-sonnet-4-6`) — core-dev, access-dev, gui-dev, test-author (substantive implementation +
+test correctness). **Haiku 4.5** (`claude-haiku-4-5-20251001`) — docs-writer, packaging-builder
+(well-scoped doc/config edits). unit-conversion-operator inherits the session model. The `model:`
+field may be overridden by `CLAUDE_CODE_SUBAGENT_MODEL` and is ignored on some Claude Code builds.
 
 ### Instructions (`.claude/instructions/`) — agents reference these, don't restate them
 - **ai-execution-discipline.md** — anti-programmatic guardrails shared by all agents:

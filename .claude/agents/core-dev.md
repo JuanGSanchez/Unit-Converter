@@ -9,6 +9,7 @@ description: >
   guard, UC-I04 affine temperature, UC-I06 compound). NOT for GUI, API routes, packaging, or running
   conversions.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-sonnet-4-6
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

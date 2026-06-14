@@ -7,6 +7,7 @@ description: >
   committed (UC-B02). Use to fix the build backend, keep the spec building, or untrack build
   artifacts. NOT for core/GUI/API code, tests, or running conversions.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-haiku-4-5-20251001
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

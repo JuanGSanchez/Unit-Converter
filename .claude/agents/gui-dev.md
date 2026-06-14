@@ -7,6 +7,7 @@ description: >
   error swallow + logging) or add GUI features (UC-I07 history panel). NOT for core math, API routes,
   packaging, or running conversions.
 tools: Read, Edit, Write, Glob, Grep, Bash
+model: claude-sonnet-4-6
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding

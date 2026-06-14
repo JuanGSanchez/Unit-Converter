@@ -8,6 +8,7 @@ description: >
   artifacts leak, and the coverage gate is met. Read-mostly: it inspects, runs gates/greps, and
   returns a PASS/FAIL verdict with findings — it does not author the fix.
 tools: Read, Glob, Grep, Bash
+model: claude-opus-4-8
 principles_applied:
   inherited:
     - P1 — Source-of-Truth Grounding
