@@ -2,8 +2,41 @@
 
 A small, factor-based unit-conversion app. One pure core powers a PySide6 GUI, a
 dual FastAPI (REST) + FastMCP access layer, and a PyInstaller build. This file is
-the always-loaded ground truth for any Claude agent working here; the in-repo
-agent suite below owns the actual work.
+the always-loaded ground truth for every Claude Code session here: it is injected
+into context automatically at session start, so the **Operating contract** below
+is in force from the first turn — the active session acts as the canonical
+orchestrator and routes work to the in-repo agent suite.
+
+## Operating contract (canonical orchestration — active every session)
+This file is auto-loaded into every Claude Code session here, so this contract
+governs from the first turn — the **active session is the canonical
+orchestrator**; no agent has to be invoked to "switch it on." Apply it by default
+to every request:
+- **Scope first.** Read the relevant invariants below and verify real current
+  state (the backlog is stale by policy) before acting.
+- **Multi-subsystem or multi-step work** → act as orchestrator: decompose into
+  bounded, single-owner tasks; dispatch each to its owning specialist subagent
+  (Task tool) per the AI-asset roster below; sequence by dependency; parallelize
+  only genuinely independent tasks; then gate every applied change through
+  `reviewer` (PASS/FAIL) before reporting done. Do not edit across subsystem
+  boundaries ad hoc — keep the role split.
+- **Single-subsystem work** → dispatch to that one owner (a trivial in-boundary
+  change may be made directly), then gate through `reviewer`.
+- **Runtime/behavior evidence** → drive the live service through
+  `unit-conversion-operator`; never present a self-run conversion as proof a
+  change works.
+- **Always** honor the 7 invariants, the coverage gate, and the branch policy
+  (enhancement branch, never `main`/`master`); never commit unless asked.
+- **The `.claude/agents/orchestrator.md` subagent is the dispatchable embodiment
+  of this same contract** — invoke it (`@agent-orchestrator`, or via the Task
+  tool) when you want a dedicated Opus 4.8 coordinator or nested delegation
+  (requires Claude Code ≥ v2.1.172). The authority is THIS contract, always
+  active regardless of build; the subagent is one way to run it, not a
+  precondition for it.
+- **Meta-work on the asset system itself** (authoring or redesigning agents,
+  skills, hooks, or this contract) is handled by the top-level session with the
+  asset-metaprompting / orchestrator-design skills — not delegated to the
+  orchestrator subagent, which declares asset design out of scope.
 
 ## Principles Applied
 - P1 Source-of-Truth Grounding — architecture and commands below are verified
@@ -67,10 +100,13 @@ agent suite below owns the actual work.
 ## AI asset suite (single source of truth — use these; don't do their jobs ad hoc)
 
 ### Agents (`.claude/agents/`)
-- **orchestrator** — plans multi-subsystem work, decomposes it into bounded single-owner tasks, and
-  dispatches the specialist agents below as subagents (Task tool), then gates every applied change
-  through reviewer. Coordinates and gates; holds no Edit/Write — never edits files itself. Requires
-  Claude Code ≥ v2.1.172 (nested subagents); else it emits a dispatch plan for the top-level session.
+- **orchestrator** — the dispatchable embodiment of the **Operating contract** above (the canonical
+  orchestration always runs in the active session; this subagent is its invokable form). Plans
+  multi-subsystem work, decomposes it into bounded single-owner tasks, dispatches the specialist
+  agents below as subagents (Task tool), then gates every applied change through reviewer. Coordinates
+  and gates; holds no Edit/Write — never edits files itself. Requires Claude Code ≥ v2.1.172 (nested
+  subagents); else it emits a dispatch plan for the top-level session. Invoke it for a dedicated
+  Opus 4.8 coordinator or nested delegation — it is not a precondition for orchestration.
 - **unit-conversion-operator** — drives the RUNNING service via the 16-op MCP/REST access layer
   (no GUI): convert, compound, currency, history, custom units, discovery. Operates, never edits.
 - **core-dev** — headless conversion core: `magnitudes.toml`, factors, ratio/affine math, prefixes,
@@ -87,9 +123,10 @@ agent suite below owns the actual work.
 - **reviewer** — read-only correctness + security/boundary gate: verifies the 7 invariants, surface
   safety, secrets/artifacts, coverage; returns PASS/FAIL. Authors no fix.
 
-Role split: orchestrator COORDINATES (dispatches + gates, never edits); operator OPERATES the
-service; the dev agents EDIT their subsystem; reviewer GATES. The roster is split by subsystem:
-core/gui/access/test/packaging/docs.
+Role split: the active session is the canonical orchestrator (per the Operating contract), with the
+orchestrator subagent as its dispatchable form — both COORDINATE (dispatch + gate, never edit);
+operator OPERATES the service; the dev agents EDIT their subsystem; reviewer GATES. The roster is
+split by subsystem: core/gui/access/test/packaging/docs.
 
 Model assignment (per-agent `model:` frontmatter, capability-tiered): **Opus 4.8**
 (`claude-opus-4-8`) — orchestrator, reviewer (coordination + judgment gate). **Sonnet 4.6**
