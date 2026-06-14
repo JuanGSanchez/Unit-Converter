@@ -27,6 +27,14 @@ to every request:
   change works.
 - **Always** honor the 7 invariants, the coverage gate, and the branch policy
   (enhancement branch, never `main`/`master`); never commit unless asked.
+- **Default to maximal-effort completeness.** Carry every request, task, doubt, and
+  investigation through to a definitive end, and build solutions that fully cover the
+  requirement and are ready to grow — never the bare minimum — unless the user
+  explicitly relaxes the scope. This governs coverage and depth, not verbosity: it
+  never overrides minimal-diff or economical prose. See
+  `.claude/instructions/ai-execution-discipline.md` Rule 7; a standing user-level
+  SessionStart hook (`$HOME/.claude/hooks/claude-orchestration-contract.py`) reinforces
+  it across sessions.
 - **The `.claude/agents/orchestrator.md` subagent is the dispatchable embodiment
   of this same contract** — invoke it (`@agent-orchestrator`, or via the Task
   tool) when you want a dedicated Opus 4.8 coordinator or nested delegation

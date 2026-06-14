@@ -9,6 +9,9 @@ execution and protects the context budget. Scope: every code/data/test/doc/build
 - P3 Systematicity — the verify→act→prove loop below is the mandatory order for every change.
 - P5 Context Budget Discipline — target by search; checkpoint at ~70%.
 - P7 Reference Hygiene — cite CLAUDE.md / BACKLOG IDs / file:symbol; never restate their content here.
+- Maximal-Effort Completeness — carry every task, doubt, and investigation to a definitive end and
+  fully cover the item; governs coverage/depth, not verbosity, and never overrides Rule 3 (minimal
+  diff). Relax only on explicit user scope-down. (asset-metaprompting P9 / orchestrator-design P12.)
 
 ## Rules
 
@@ -30,6 +33,11 @@ execution and protects the context budget. Scope: every code/data/test/doc/build
    CLAUDE.md invariant is unproven.
 6. Always run the named gate and READ its output before claiming a gate passed. No "done" on an
    assumed-green gate; quote the printed result.
+7. Always pursue the item to completeness: resolve every sub-part, doubt, and implied follow-up the
+   acceptance criteria require — never stop at a partial or bare-minimum pass — while keeping the
+   change itself minimal (Rule 3) and the response economical. Maximal effort means full coverage and
+   definitive follow-through, not extra scope or verbosity; relax only when the user explicitly scopes
+   the effort down.
 
 ## Conditional rules
 - If understanding a change would require reading 5 or more files, then summarize what you have and
