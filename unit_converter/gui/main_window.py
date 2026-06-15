@@ -4,7 +4,7 @@ unit_converter.gui.main_window
 PySide6 main window for the U Converter application.
 
 Features:
-- Fixed 235 x 385 px window, centered on screen, non-resizable.
+- Fixed 260 x 421 px window (golden-ratio portrait, φ ≈ 1.618), centered on screen, non-resizable.
 - Custom window icon from ``Logo UC.png``.
 - Magnitude selector (QComboBox), two unit selectors with SI/IEC order
   controls (scrollable QLabel), numeric entry (QLineEdit), and a
@@ -95,6 +95,18 @@ from unit_converter.gui.theme_persist import (
     normalize_hex_color,
     save_theme_prefs,
 )
+from unit_converter.gui.geometry import (
+    MARGIN_H,
+    MARGIN_V,
+    MARGIN_HEADER_TOP,
+    SPACING_FORM_H,
+    SPACING_FORM_V,
+    SPACING_MAIN,
+    SPACING_ROW,
+    center_dialog_on_parent,
+    dialog_default_size,
+    golden_ratio_size,
+)
 from unit_converter.gui.resources import logo_path
 
 
@@ -109,9 +121,9 @@ __datver__ = "06-2026"
 __pyver__ = "3.11"
 __license__ = "GPLv3"
 
-# Window geometry — matches original exactly
-_WINDOW_WIDTH = 235
-_WINDOW_HEIGHT = 385
+# Window geometry — golden ratio (φ ≈ 1.618) portrait, slightly larger than
+# the original 235×385.  Width chosen first; height = round(width * PHI).
+_WINDOW_WIDTH, _WINDOW_HEIGHT = golden_ratio_size(260)
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +378,8 @@ class _HistoryDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Conversion History")
-        self.resize(420, 340)
+        _w, _h = dialog_default_size("history")
+        center_dialog_on_parent(self, _w, _h)
         self.setToolTip(_tip("Recent conversions and saved favorites."))
 
         # Apply dialog theme using the live override-aware color mapping.
@@ -439,7 +452,8 @@ class _AddUnitDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Add Custom Unit")
-        self.resize(300, 180)
+        _w, _h = dialog_default_size("add_unit")
+        center_dialog_on_parent(self, _w, _h)
         self.setToolTip(_tip("Add a custom unit to an existing magnitude."))
 
         # Apply dialog theme using the live override-aware color mapping.
@@ -538,7 +552,8 @@ class _SettingsDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings — Theme & Colors")
-        self.resize(430, 480)
+        _w, _h = dialog_default_size("settings")
+        center_dialog_on_parent(self, _w, _h)
         self.setToolTip(_tip("Configure the application theme and widget colours."))
 
         # Working copy of colours that the user is editing
@@ -571,8 +586,8 @@ class _SettingsDialog(QDialog):
         color_group = QGroupBox("Widget colours  (hex #RRGGBB or click swatch)")
         scroll_content = QWidget()
         form = QFormLayout(scroll_content)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(6)
+        form.setHorizontalSpacing(SPACING_FORM_H)
+        form.setVerticalSpacing(SPACING_FORM_V)
 
         self._swatch_btns: dict[str, QPushButton] = {}
         self._hex_edits: dict[str, QLineEdit] = {}
@@ -707,7 +722,7 @@ class MainWindow(QWidget):
     """
     PySide6 main window for U Converter.
 
-    Fixed 235 x 385 px, centered, non-resizable.  Wired entirely to the pure
+    Fixed 260 x 421 px (golden-ratio portrait), centered, non-resizable.  Wired entirely to the pure
     ``unit_converter.core.converter`` API — no conversion math is implemented
     here.  Integrates history (UC-I07) and custom units (UC-I03).
 
@@ -826,8 +841,8 @@ class MainWindow(QWidget):
         self._descriptions: list = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 7, 10, 7)
-        layout.setSpacing(5)
+        layout.setContentsMargins(MARGIN_H, MARGIN_V, MARGIN_H, MARGIN_V)
+        layout.setSpacing(SPACING_MAIN)
 
         # ---- Magnitude label + combo ----
         self._lab_mag = QLabel("Magnitude")
@@ -876,7 +891,7 @@ class MainWindow(QWidget):
         """Create a horizontal row with a direction label on the left and a
         scientific-notation value label on the right."""
         row = QHBoxLayout()
-        row.setContentsMargins(0, 5, 0, 0)
+        row.setContentsMargins(0, MARGIN_HEADER_TOP, 0, 0)
 
         lab = QLabel(label_text)
         lab.setStyleSheet(
@@ -911,7 +926,7 @@ class MainWindow(QWidget):
         """Create the order label + unit combobox row for a given slot (1=from, 2=to)."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setSpacing(SPACING_ROW)
 
         order_lab = _OrderLabel(
             on_change=lambda: self._unit_converter(1),
@@ -951,7 +966,7 @@ class MainWindow(QWidget):
         """Create the numeric entry + sweep label row for a given slot."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setSpacing(SPACING_ROW)
 
         sweep = _SweepLabel()
         sweep.restyle(self._active_colors)
