@@ -10,8 +10,9 @@ Architecture
   the currency cache).
 - Each entry records the magnitude, from/to units, orders, and the input +
   result values, plus an ISO-8601 timestamp.
-- The list is capped at ``MAX_HISTORY`` entries (oldest entry dropped when
-  full) so the file stays small.
+- The non-favorite entries are capped at ``MAX_HISTORY`` (oldest non-favorite
+  entries are dropped when the count of non-favorite entries exceeds the cap).
+  Favorite entries are NEVER dropped by the cap — they are exempt.
 - Favorites are stored as a named subset: each entry optionally has a
   ``"favorite"`` key with a user-supplied label.
 
@@ -21,16 +22,26 @@ Public API
 ----------
 record(magnitude, value, from_unit, to_unit, result, *, from_order="1",
        to_order="1", sig_figs=None) -> HistoryEntry
-    Append a completed conversion to the history file.
+    Append a completed conversion to the history file.  Non-favorite entries
+    are capped at MAX_HISTORY; favorites are never dropped.
 
 load_history(path=None) -> list[HistoryEntry]
     Load and return the full history list (most-recent-first).
 
 clear_history(path=None) -> None
-    Delete all history entries.
+    Delete all history entries (favorites included).
 
 add_favorite(entry, label="", path=None) -> None
-    Mark an existing entry (by index or copy) as a favorite with a label.
+    Mark an existing entry (matched by timestamp) as a favorite with a label.
+
+remove_favorite(entry, path=None) -> None
+    Clear the favorite flag and label on an existing entry (matched by
+    timestamp).  No-op if the entry is not found or is not a favorite.
+
+delete_entry(entry, path=None) -> None
+    Remove a single entry (matched by timestamp) from history entirely.
+    Deleting a favorite entry is permitted — it removes the record completely.
+    No-op if no entry with that timestamp is found.
 
 list_favorites(path=None) -> list[HistoryEntry]
     Return only the entries marked as favorites.
@@ -47,7 +58,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-MAX_HISTORY = 200  # cap on the number of stored entries
+MAX_HISTORY = 100  # cap on the number of non-favorite stored entries
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +178,7 @@ def record(
         The newly-appended entry.
     """
     path = _history_path(history_path)
-    ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    ts = datetime.now(tz=timezone.utc).isoformat(timespec="microseconds")
 
     entry = HistoryEntry(
         magnitude=magnitude,
@@ -183,9 +194,13 @@ def record(
 
     raw = _load_raw(path)
     raw.append(asdict(entry))
-    # Cap at MAX_HISTORY (drop oldest)
-    if len(raw) > MAX_HISTORY:
-        raw = raw[-MAX_HISTORY:]
+    # Cap non-favorite entries at MAX_HISTORY; favorites are NEVER dropped.
+    # Collect indices of non-favorite entries; if there are more than MAX_HISTORY,
+    # drop the oldest (lowest-index) ones.  Favorites keep their positions untouched.
+    non_fav_indices = [i for i, d in enumerate(raw) if not d.get("favorite", False)]
+    if len(non_fav_indices) > MAX_HISTORY:
+        drop = set(non_fav_indices[: len(non_fav_indices) - MAX_HISTORY])
+        raw = [d for i, d in enumerate(raw) if i not in drop]
     _save_raw(raw, path)
     return entry
 
@@ -250,6 +265,58 @@ def add_favorite(
             d["favorite"] = True
             d["favorite_label"] = label
             break
+    _save_raw(raw, path)
+
+
+def remove_favorite(
+    entry: HistoryEntry,
+    history_path: Optional[Path] = None,
+) -> None:
+    """
+    Clear the favorite flag on an entry.
+
+    Finds the entry in the history file by timestamp and sets ``favorite``
+    to ``False`` and ``favorite_label`` to ``""``.  No-op if no matching
+    timestamp is found.
+
+    Parameters
+    ----------
+    entry:
+        The entry whose favorite status should be cleared.
+    history_path:
+        Override default path (useful in tests).
+    """
+    path = _history_path(history_path)
+    raw = _load_raw(path)
+    for d in raw:
+        if d.get("timestamp") == entry.timestamp:
+            d["favorite"] = False
+            d["favorite_label"] = ""
+            break
+    _save_raw(raw, path)
+
+
+def delete_entry(
+    entry: HistoryEntry,
+    history_path: Optional[Path] = None,
+) -> None:
+    """
+    Remove a single entry from history entirely.
+
+    Finds the entry by timestamp and removes it from the history file.
+    Deleting a favorite entry is permitted — it removes the record
+    completely.  No-op if no entry with that timestamp is found.
+
+    Parameters
+    ----------
+    entry:
+        The entry to remove.
+    history_path:
+        Override default path (useful in tests).
+    """
+    path = _history_path(history_path)
+    raw = _load_raw(path)
+    raw = [d for d in raw if d.get("timestamp") != entry.timestamp]
     _save_raw(raw, path)
 
 

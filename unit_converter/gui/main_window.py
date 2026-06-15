@@ -81,10 +81,13 @@ from unit_converter.core.data_loader import MagnitudeDataError, add_custom_unit
 from unit_converter.core.history import (
     HistoryEntry,
     add_favorite,
+    delete_entry as _delete_entry,
     list_favorites,
     load_history,
     record as _record_history,
+    remove_favorite,
 )
+from unit_converter.gui.history_menu import context_menu_actions as _ctx_actions
 from unit_converter.gui import theme as _theme
 from unit_converter.gui.description import attach_description
 from unit_converter.gui.format_result import format_result as _format_result
@@ -365,10 +368,24 @@ class _NumEntry(QLineEdit):
 
 class _HistoryDialog(QDialog):
     """
-    Non-modal dialog listing recent conversions and favorites.
+    Non-modal dialog listing recent conversions and favorites (UC-I07).
 
     Selecting an entry and clicking "Re-run" emits it back to the main window
-    via the ``rerun_entry`` signal (the parent connects to ``_apply_history``).
+    via ``accept()``; the parent reads ``selected_entry()`` after exec().
+
+    Features
+    --------
+    - Full-history view (default) shows all entries via ``load_history()``;
+      starred entries are prefixed with ``"* "``.
+    - Favorites-only view shows only favorited entries via ``list_favorites()``.
+    - "Show Favorites" / "Show All" toggle button switches between views; its
+      label reflects the current mode.
+    - Right-click context menu on the list provides: Re-run, Add to Favorites,
+      Remove from Favorites, Delete.  Which actions are active is determined by
+      :func:`unit_converter.gui.history_menu.context_menu_actions` (Qt-free
+      helper) based on the current view mode and the selected entry's state.
+    - After any mutating action (add/remove favorite, delete) the list is
+      refreshed in-place, respecting the current view mode.
     """
 
     def __init__(
@@ -388,31 +405,59 @@ class _HistoryDialog(QDialog):
         self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
         self._selected_entry: HistoryEntry | None = None
 
+        # Track whether we are in favorites-only view
+        self._favorites_mode: bool = False
+
         layout = QVBoxLayout(self)
 
         self._list = QListWidget()
-        self._list.setToolTip(_tip("Recent conversions — double-click to re-run."))
+        self._list.setToolTip(_tip(
+            "Recent conversions — double-click to re-run.\n"
+            "Right-click for more options."
+        ))
+        # Enable the custom context menu signal
+        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._list)
 
         buttons = QDialogButtonBox()
         self._btn_rerun = buttons.addButton("Re-run", QDialogButtonBox.ActionRole)
         self._btn_fav = buttons.addButton("Favorite", QDialogButtonBox.ActionRole)
+        self._btn_toggle = buttons.addButton(
+            "Show Favorites", QDialogButtonBox.ActionRole
+        )
         buttons.addButton(QDialogButtonBox.Close)
         layout.addWidget(buttons)
 
         self._btn_rerun.setToolTip(_tip("Re-populate the converter with this entry."))
         self._btn_fav.setToolTip(_tip("Mark this entry as a favorite."))
+        self._btn_toggle.setToolTip(_tip(
+            "Switch between full history and favorites-only view."
+        ))
 
         self._btn_rerun.clicked.connect(self._on_rerun)
         self._btn_fav.clicked.connect(self._on_favorite)
+        self._btn_toggle.clicked.connect(self._on_toggle_view)
         buttons.rejected.connect(self.close)
 
         self._entries: list[HistoryEntry] = []
         self._refresh()
 
+    # ------------------------------------------------------------------
+    # List refresh
+    # ------------------------------------------------------------------
+
     def _refresh(self) -> None:
+        """Reload and redisplay entries for the current view mode."""
         self._list.clear()
-        self._entries = load_history()
+        try:
+            if self._favorites_mode:
+                self._entries = list_favorites()
+            else:
+                self._entries = load_history()
+        except Exception:
+            logger.exception("Failed to load history for dialog refresh")
+            self._entries = []
         for e in self._entries:
             star = "* " if e.favorite else ""
             label = (
@@ -421,17 +466,132 @@ class _HistoryDialog(QDialog):
             )
             self._list.addItem(QListWidgetItem(label))
 
+    # ------------------------------------------------------------------
+    # Button handlers
+    # ------------------------------------------------------------------
+
     def _on_rerun(self) -> None:
+        """Re-run button: accept dialog and surface the selected entry."""
         idx = self._list.currentRow()
         if 0 <= idx < len(self._entries):
             self._selected_entry = self._entries[idx]
             self.accept()
 
     def _on_favorite(self) -> None:
+        """Favorite button: add the selected entry as a favorite."""
         idx = self._list.currentRow()
         if 0 <= idx < len(self._entries):
-            add_favorite(self._entries[idx], label="")
+            entry = self._entries[idx]
+            try:
+                add_favorite(entry, label="")
+            except Exception:
+                logger.exception(
+                    "Failed to add favorite for entry timestamp=%r", entry.timestamp
+                )
+                return
             self._refresh()
+
+    def _on_toggle_view(self) -> None:
+        """Toggle between full-history and favorites-only view."""
+        self._favorites_mode = not self._favorites_mode
+        if self._favorites_mode:
+            self._btn_toggle.setText("Show All")
+            self._btn_toggle.setToolTip(_tip(
+                "Switch back to the full history view."
+            ))
+        else:
+            self._btn_toggle.setText("Show Favorites")
+            self._btn_toggle.setToolTip(_tip(
+                "Switch to favorites-only view."
+            ))
+        self._refresh()
+
+    # ------------------------------------------------------------------
+    # Right-click context menu
+    # ------------------------------------------------------------------
+
+    def _on_context_menu(self, pos) -> None:
+        """Build and show a context menu for the list item under *pos*."""
+        idx = self._list.currentRow()
+        if not (0 <= idx < len(self._entries)):
+            return
+
+        entry = self._entries[idx]
+        actions_enabled = _ctx_actions(
+            is_favorites_view=self._favorites_mode,
+            entry_is_favorite=entry.favorite,
+        )
+
+        menu = QMenu(self)
+
+        act_rerun = menu.addAction("Re-run")
+        act_rerun.setEnabled(actions_enabled.get("run_again", False))
+
+        menu.addSeparator()
+
+        act_add_fav = menu.addAction("Add to Favorites")
+        act_add_fav.setEnabled(actions_enabled.get("add_favorite", False))
+        act_add_fav.setVisible(actions_enabled.get("add_favorite", False))
+
+        act_rem_fav = menu.addAction("Remove from Favorites")
+        act_rem_fav.setEnabled(actions_enabled.get("remove_favorite", False))
+        act_rem_fav.setVisible(actions_enabled.get("remove_favorite", False))
+
+        menu.addSeparator()
+
+        act_delete = menu.addAction("Delete")
+        act_delete.setEnabled(actions_enabled.get("delete", False))
+
+        chosen = menu.exec(self._list.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+
+        if chosen is act_rerun:
+            self._selected_entry = entry
+            self.accept()
+        elif chosen is act_add_fav:
+            self._ctx_add_favorite(entry)
+        elif chosen is act_rem_fav:
+            self._ctx_remove_favorite(entry)
+        elif chosen is act_delete:
+            self._ctx_delete(entry)
+
+    def _ctx_add_favorite(self, entry: HistoryEntry) -> None:
+        """Context menu — Add to Favorites."""
+        try:
+            add_favorite(entry, label="")
+        except Exception:
+            logger.exception(
+                "Context menu: failed to add favorite, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    def _ctx_remove_favorite(self, entry: HistoryEntry) -> None:
+        """Context menu — Remove from Favorites."""
+        try:
+            remove_favorite(entry)
+        except Exception:
+            logger.exception(
+                "Context menu: failed to remove favorite, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    def _ctx_delete(self, entry: HistoryEntry) -> None:
+        """Context menu — Delete entry."""
+        try:
+            _delete_entry(entry)
+        except Exception:
+            logger.exception(
+                "Context menu: failed to delete entry, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    # ------------------------------------------------------------------
+    # Public result accessor
+    # ------------------------------------------------------------------
 
     def selected_entry(self) -> HistoryEntry | None:
         return self._selected_entry
