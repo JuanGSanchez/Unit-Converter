@@ -87,6 +87,7 @@ from unit_converter.core.history import (
 )
 from unit_converter.gui import theme as _theme
 from unit_converter.gui.description import attach_description
+from unit_converter.gui.format_result import format_result as _format_result
 from unit_converter.gui.theme_persist import (
     is_valid_hex_color,
     load_theme_prefs,
@@ -1227,7 +1228,9 @@ class MainWindow(QWidget):
             self._val2_old = result
 
             self._entry2.blockSignals(True)
-            self._entry2.setText(f"{result}")
+            self._entry2.setText(
+                _format_result(result, self._sweep2.text())
+            )
             self._entry2.blockSignals(False)
 
             order_exp2 = order_table.get(order_to, 0)
@@ -1282,7 +1285,9 @@ class MainWindow(QWidget):
             self._val1_old = result
 
             self._entry1.blockSignals(True)
-            self._entry1.setText(f"{result}")
+            self._entry1.setText(
+                _format_result(result, self._sweep1.text())
+            )
             self._entry1.blockSignals(False)
 
             order_exp1 = order_table.get(order_from, 0)
