@@ -176,14 +176,10 @@ class _OrderLabel(QLabel):
         self.setToolTip(_tip(
             "Scroll to change order of magnitude.\nClick to reset."
         ))
-        # Default styling (will be overridden by apply_colors_to_main_window)
-        self._apply_default_style()
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_order_label_stylesheet(colors))
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -236,13 +232,10 @@ class _SweepLabel(QLabel):
         self.setToolTip(_tip(
             "Scroll to change digit position sweep.\nClick to reset."
         ))
-        self._apply_default_style()
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_sweep_label_stylesheet(colors))
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -306,15 +299,12 @@ class _NumEntry(QLineEdit):
         validator.setNotation(QDoubleValidator.StandardNotation)
         self.setValidator(validator)
         self.setAlignment(Qt.AlignLeft)
-        self._apply_default_style()
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setEnabled(False)
         self.setToolTip(_tip(
             "Write or press Enter\nto run the conversion."
         ))
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_entry_stylesheet(colors))
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""

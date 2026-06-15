@@ -43,6 +43,7 @@ refresh_rates(custom_cache_path=None) -> RatesResult
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import socket
@@ -103,7 +104,15 @@ class RatesResult:
 # Cache file path
 # ---------------------------------------------------------------------------
 
+@functools.lru_cache(maxsize=None)
 def _cache_path(custom: Optional[Path] = None) -> Path:
+    """Return the currency cache file path, caching the result per argument value.
+
+    ``Path.home()`` resolution and the ``mkdir`` syscall are performed at most
+    once per distinct *custom* value (including ``None``).  ``Path`` is
+    hashable so ``lru_cache`` works correctly here.  ``mkdir(exist_ok=True)``
+    is idempotent — calling it only once is safe.
+    """
     user_dir = Path.home() / ".unit-converter"
     user_dir.mkdir(parents=True, exist_ok=True)
     return Path(custom) if custom is not None else user_dir / "currency_cache.json"

@@ -118,6 +118,12 @@ class HealthResponse(BaseModel):
     version: str
 
 
+# The health response is pure static data: ``status`` is always ``"ok"`` and
+# ``__version__`` is fixed at import time.  Construct once to avoid allocating
+# a new Pydantic model instance on every GET /health call.
+_HEALTH_RESPONSE = HealthResponse(status="ok", version=__version__)
+
+
 class CurrencyRateResponse(BaseModel):
     """Result of GET /currencies/rate."""
 
@@ -289,7 +295,7 @@ def _network_error_to_503(exc: Exception) -> HTTPException:
 )
 def health() -> HealthResponse:
     """Return a liveness confirmation and the package version."""
-    return HealthResponse(status="ok", version=__version__)
+    return _HEALTH_RESPONSE
 
 
 @app.get(
