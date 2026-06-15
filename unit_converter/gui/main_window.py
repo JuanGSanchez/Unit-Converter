@@ -86,6 +86,7 @@ from unit_converter.core.history import (
     record as _record_history,
 )
 from unit_converter.gui import theme as _theme
+from unit_converter.gui.description import attach_description
 from unit_converter.gui.theme_persist import (
     is_valid_hex_color,
     load_theme_prefs,
@@ -820,6 +821,9 @@ class MainWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
+        # Holds DescriptionLabel objects to prevent GC from uninstalling filters.
+        self._descriptions: list = []
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 7, 10, 7)
         layout.setSpacing(5)
@@ -927,6 +931,17 @@ class MainWindow(QWidget):
             self._order2 = order_lab
             self._cb_unit2 = unit_cb
 
+        # Instant description overlay for the unit combo (zero delay, auto-sized).
+        # Stored in self._descriptions to prevent GC from removing the event filter.
+        self._descriptions.append(attach_description(
+            unit_cb,
+            "Select the unit to convert from or to.\n"
+            "Only units for the chosen magnitude are listed.",
+            show_delay_ms=0,
+            max_wrap_width=220,
+            colors=self._active_colors,
+        ))
+
         row.addWidget(order_lab)
         row.addWidget(unit_cb, stretch=1)
         return row
@@ -953,6 +968,18 @@ class MainWindow(QWidget):
         else:
             self._sweep2 = sweep
             self._entry2 = entry
+
+        # Instant description overlay for the sweep label (zero delay, auto-sized).
+        # Stored in self._descriptions to prevent GC from removing the event filter.
+        self._descriptions.append(attach_description(
+            sweep,
+            "Scroll to change the decimal digit position\n"
+            "used by the Up/Down arrow increment.\n"
+            "Click to reset to auto.",
+            show_delay_ms=0,
+            max_wrap_width=220,
+            colors=self._active_colors,
+        ))
 
         row.addWidget(entry, stretch=1)
         row.addWidget(sweep)

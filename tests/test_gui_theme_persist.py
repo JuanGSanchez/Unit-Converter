@@ -55,10 +55,23 @@ from unit_converter.gui.theme import (
 
 
 def test_no_pyside6_imported() -> None:
-    """theme_persist must be importable without PySide6."""
-    pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-    assert pyside_modules == [], (
-        f"PySide6 was imported as a side-effect of theme_persist: {pyside_modules}"
+    """theme_persist source must not contain any PySide6 import statement.
+
+    Checking sys.modules is ordering-dependent (other test modules in the same
+    pytest session may import PySide6 legitimately).  Scanning the source text
+    is order-independent and directly verifies the Qt-freedom requirement.
+    """
+    src_path = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "theme_persist.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    pyside_imports = [
+        line.strip() for line in src.splitlines()
+        if line.strip().startswith(("from PySide6", "import PySide6"))
+    ]
+    assert pyside_imports == [], (
+        f"theme_persist.py contains PySide6 import(s): {pyside_imports}"
     )
 
 
@@ -475,22 +488,49 @@ class TestBuildDialogStylesheet:
         )
 
     def test_no_pyside6_imported_by_theme(self) -> None:
-        # build_dialog_stylesheet must remain importable without Qt.
-        pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-        assert pyside_modules == [], (
-            f"PySide6 was pulled in as a side-effect of theme: {pyside_modules}"
+        # theme.py must not contain any PySide6 import statement.
+        # Source-text scan is order-independent; sys.modules checks are not
+        # (other test modules in the same session may import PySide6 legitimately).
+        src_path = (
+            Path(__file__).resolve().parent.parent
+            / "unit_converter" / "gui" / "theme.py"
+        )
+        src = src_path.read_text(encoding="utf-8")
+        pyside_imports = [
+            line.strip() for line in src.splitlines()
+            if line.strip().startswith(("from PySide6", "import PySide6"))
+        ]
+        assert pyside_imports == [], (
+            f"theme.py contains PySide6 import(s): {pyside_imports}"
         )
 
 
 # =========================================================================
-# Hover-tooltip invariant lock  (Qt-free: source-text scan only)
-# Guards the repo's tooltip invariant — every interactive control keeps its
-# hover tooltip. We assert the count of setToolTip(...) calls in the GUI does
-# not regress below the established floor, without importing PySide6.
+# Hover-description invariant lock  (Qt-free: source-text scan only)
+#
+# Guards TWO complementary invariants:
+#
+# 1. setToolTip floor — every interactive control that had a native Qt tooltip
+#    still has one (count must not regress below the established floor).
+#
+# 2. DescriptionLabel / attach_description coverage — the two widget pairs that
+#    must show INSTANT descriptions (unit combos, sweep labels) are wired via
+#    attach_description in main_window.py, and the description module exists
+#    with the required public API symbols.
+#
+# Both locks are pure source-text scans — no Qt/display required.
 # =========================================================================
 
 # Floor established after the Light/Dark theming + Settings pass.
+# The DescriptionLabel additions are ADDITIVE — they do not replace setToolTip
+# calls, so this count must stay at or above 19.
 _MIN_SETTOOLTIP_CALLS = 19
+
+# Minimum number of attach_description call-sites in main_window.py.
+# _make_unit_row and _make_entry_row each contain one call-site, and each is
+# invoked for slot=1 and slot=2 at runtime — so 2 source call-sites produce
+# 4 DescriptionLabel objects.  The source scan sees 2.
+_MIN_ATTACH_DESCRIPTION_CALLS = 2
 
 
 def _main_window_source() -> str:
@@ -501,9 +541,30 @@ def _main_window_source() -> str:
     return src.read_text(encoding="utf-8")
 
 
+def _description_module_source() -> str:
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "description.py"
+    )
+    return src.read_text(encoding="utf-8")
+
+
 class TestTooltipInvariant:
-    """The GUI must keep its hover tooltips (CLAUDE.md GUI tooltip invariant).
-    Counted by scanning the source text so no Qt/display is required."""
+    """
+    The GUI must keep its hover tooltips AND its instant descriptions.
+
+    Invariant 1 (setToolTip floor): every interactive control keeps its Qt
+    native tooltip — the count of setToolTip( calls must not regress.
+
+    Invariant 2 (DescriptionLabel coverage): the two specified widget pairs
+    (unit combos + sweep labels) have instant descriptions via
+    attach_description.  The description.py module must export the required
+    public API symbols.
+
+    All checks are pure source-text scans — no Qt/display required.
+    """
+
+    # -- Invariant 1: setToolTip count floor --
 
     def test_setooltip_count_does_not_regress(self) -> None:
         count = _main_window_source().count("setToolTip(")
@@ -512,9 +573,75 @@ class TestTooltipInvariant:
             f"expected >= {_MIN_SETTOOLTIP_CALLS}. A hover tooltip was dropped."
         )
 
-    def test_no_pyside6_imported_by_this_scan(self) -> None:
-        # The invariant check is pure text scanning — Qt must not be imported.
-        pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-        assert pyside_modules == [], (
-            f"PySide6 was pulled in unexpectedly: {pyside_modules}"
+    # -- Invariant 2a: attach_description wired in main_window.py --
+
+    def test_attach_description_imported_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "attach_description" in src, (
+            "attach_description is not imported/used in main_window.py. "
+            "Instant description overlays are not wired."
         )
+
+    def test_attach_description_call_count_not_below_floor(self) -> None:
+        count = _main_window_source().count("attach_description(")
+        assert count >= _MIN_ATTACH_DESCRIPTION_CALLS, (
+            f"attach_description( call count regressed: found {count}, "
+            f"expected >= {_MIN_ATTACH_DESCRIPTION_CALLS}. "
+            "An instant description for a unit combo or sweep label was dropped."
+        )
+
+    # -- Invariant 2b: description.py API symbols --
+
+    def test_description_module_exports_attach_description(self) -> None:
+        src = _description_module_source()
+        assert "def attach_description" in src, (
+            "attach_description function not found in description.py."
+        )
+
+    def test_description_module_exports_build_stylesheet(self) -> None:
+        src = _description_module_source()
+        assert "def build_description_stylesheet" in src, (
+            "build_description_stylesheet not found in description.py."
+        )
+
+    def test_description_module_has_show_delay_param(self) -> None:
+        src = _description_module_source()
+        assert "show_delay_ms" in src, (
+            "show_delay_ms parameter not found in description.py — "
+            "delay configurability requirement is broken."
+        )
+
+    def test_description_module_has_max_wrap_width_param(self) -> None:
+        src = _description_module_source()
+        assert "max_wrap_width" in src, (
+            "max_wrap_width parameter not found in description.py — "
+            "auto-size/wrap requirement is broken."
+        )
+
+    def test_description_module_has_restyle_method(self) -> None:
+        src = _description_module_source()
+        assert "def restyle" in src, (
+            "restyle method not found in description.py — "
+            "theme-change wiring is broken."
+        )
+
+    # -- Qt-freedom guard --
+
+    def test_no_pyside6_imported_by_this_scan(self) -> None:
+        # theme_persist.py and theme.py must not contain PySide6 import
+        # statements.  Source-text scan is order-independent; checking
+        # sys.modules is not safe when other test modules in the same
+        # pytest session legitimately import PySide6 (e.g. test_description.py).
+        for mod_rel in (
+            ("unit_converter", "gui", "theme_persist.py"),
+            ("unit_converter", "gui", "theme.py"),
+        ):
+            src_path = Path(__file__).resolve().parent.parent.joinpath(*mod_rel)
+            src = src_path.read_text(encoding="utf-8")
+            bad = [
+                line.strip() for line in src.splitlines()
+                if line.strip().startswith(("from PySide6", "import PySide6"))
+            ]
+            assert bad == [], (
+                f"{src_path.name} contains PySide6 import(s): {bad}"
+            )

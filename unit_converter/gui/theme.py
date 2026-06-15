@@ -308,3 +308,9 @@ def apply_colors_to_main_window(win: "MainWindow", colors: dict[str, str]) -> No
     # Unit combos
     for cb in (win._cb_unit1, win._cb_unit2):
         cb.setStyleSheet(build_unit_combo_stylesheet(colors))
+
+    # Instant description overlays — restyle with the new palette.
+    # The _descriptions list is created by _build_ui; guard against early
+    # calls (e.g. _setup_window) before _build_ui has run.
+    for desc in getattr(win, "_descriptions", []):
+        desc.restyle(colors)
