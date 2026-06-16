@@ -80,6 +80,12 @@ A separate **sweep** control lets you adjust the numeric value by scrolling, inc
 or decrementing by the current sweep step. Scroll the mouse wheel or use Up/Down keys while
 the sweep control is focused. Click to reset to `...`.
 
+**Result display:** Result numbers are capped at **10 decimal places (rounded)** by default.
+You can override this cap by entering a negative integer into the sweep control (e.g. `-15`
+to show 15 decimal places). The sweep control defaults to `"..."` (auto-detect, use the cap),
+`"0"` (integer nudge, use the cap), `"-N"` (show N decimal places deep), or `"+N"` (tens/hundreds
+position, use the cap).
+
 ### Keyboard shortcuts
 
 | Key | Action |
@@ -93,10 +99,22 @@ the sweep control is focused. Click to reset to `...`.
 Right-click anywhere in the main window to open a context menu with the following options:
 
 1. **Settings...** — Opens the Settings dialog for theme selection and per-widget color picker.
-2. **History / Favorites...** — Opens the conversion history panel to view, re-use, and manage favorite conversions.
+2. **History / Favorites...** — Opens the conversion history panel to view and manage conversions (see below).
 3. **Add Custom Unit...** — Opens the custom unit dialog to define and persist user-defined units.
 4. **About...** — Displays application information (author, version, license).
 5. **Exit** — Closes the application (equivalent to Ctrl+Q).
+
+#### History dialog and Favorites toggle
+
+The History dialog displays a list of recent conversions (most-recent-first, capped at 100 non-favorite entries;
+favorite entries are exempt from the cap). The dialog features:
+
+- **Favorites toggle** — Switch between viewing the full history or only favorited entries.
+- **Right-click context menu on list entries** with the following actions:
+  - **Run again** — Populate the main window with this conversion's parameters and re-run it.
+  - **Delete** — Remove this entry from history entirely (works in both full and favorites-only view).
+  - **Add to Favorites** — Mark the entry as a favorite with an optional label (full-history view only).
+  - **Remove from Favorites** — Clear the favorite flag and label (visible when the entry is already favorited).
 
 ### Settings and theming
 
@@ -154,7 +172,10 @@ from unit_converter.core.converter import list_magnitudes, list_units, convert
 
 # List available magnitudes
 list_magnitudes()
-# -> ['Area', 'Data', 'Energy', 'Length', 'Mass', 'Power', 'Pressure', 'Time', 'Volume']
+# -> ['Absorbed_dose', 'Acceleration', 'Amount_of_substance', 'Area', 'Data', 'Density',
+#     'Electric_charge', 'Electric_resistance', 'Energy', 'Equivalent_dose', 'Force', 'Frequency',
+#     'Length', 'Mass', 'Plane_angle', 'Power', 'Pressure', 'Radiation_exposure', 'Radioactivity',
+#     'Speed', 'Temperature', 'Temperature_delta', 'Time', 'Voltage', 'Volume']
 
 # List units for a magnitude
 list_units("Mass")
@@ -335,9 +356,11 @@ during a forced refresh.
 
 ## Conversion history and favorites
 
-History is persisted to `~/.unit-converter/history.json` (capped list, most-recent-first).
-Each entry records magnitude, units, orders, input value, result, `sig_figs`, and an
-ISO-8601 UTC timestamp. Entries can be marked as favorites with an optional label.
+History is persisted to `~/.unit-converter/history.json` (most-recent-first).
+Non-favorite entries are capped at **100 records**; when exceeded, oldest non-favorite entries are dropped.
+**Favorite entries are exempt from the cap and never auto-dropped.** Each entry records magnitude,
+units, orders, input value, result, `sig_figs`, and an ISO-8601 UTC timestamp. Entries can be marked
+as favorites with an optional label.
 
 ### REST
 
@@ -358,14 +381,16 @@ curl -X POST http://localhost:8000/history/favorites \
   -H "Content-Type: application/json" \
   -d '{"timestamp":"2026-06-13T10:00:00Z","label":"lb to g baseline"}'
 
-# Clear all history
+# Clear all history (including favorites)
 curl -X DELETE http://localhost:8000/history
 ```
 
 ### GUI
 
-The history panel is accessible from the main window. Recent conversions appear
-automatically; click an entry to mark it as a favorite.
+The history panel is accessible from the right-click window menu (select **History / Favorites...**).
+A **Favorites toggle** button allows switching between viewing the full history and only favorited entries.
+Right-click on any entry in the list to access the context menu for actions: Run again, Delete,
+Add to Favorites (full view only), or Remove from Favorites (for existing favorites).
 
 ---
 
@@ -397,8 +422,12 @@ a new unit without editing any file.
 
 ## Supported magnitudes
 
-The default database (`unit_converter/data/magnitudes.toml`) ships with nine magnitudes:
-Area, Data, Energy, Length, Mass, Power, Pressure, Time, Volume.
+The default database (`unit_converter/data/magnitudes.toml`) ships with **25 magnitudes**:
+
+Absorbed dose, Acceleration, Amount of substance, Area, Data, Density, Electric charge,
+Electric resistance, Energy, Equivalent dose, Force, Frequency, Length, Mass, Plane angle,
+Power, Pressure, Radiation exposure, Radioactivity, Speed, Temperature, Temperature delta
+(increments), Time, Voltage, Volume.
 
 To see the current list and units at runtime:
 
@@ -409,6 +438,9 @@ curl http://localhost:8000/magnitudes
 # via Python:
 python -c "from unit_converter.core.converter import list_magnitudes; print(list_magnitudes())"
 ```
+
+**Note:** Magnitude names are internally stored with underscores (e.g. `Absorbed_dose`, `Electric_charge`)
+and are case-sensitive. Use `list_magnitudes()` to confirm exact names.
 
 ---
 

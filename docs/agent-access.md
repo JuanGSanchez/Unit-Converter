@@ -157,7 +157,10 @@ tools, same core.
 #### GET /magnitudes
 
 ```json
-["Area", "Data", "Energy", "Length", "Mass", "Power", "Pressure", "Time", "Volume"]
+["Absorbed_dose", "Acceleration", "Amount_of_substance", "Area", "Data", "Density",
+ "Electric_charge", "Electric_resistance", "Energy", "Equivalent_dose", "Force", "Frequency",
+ "Length", "Mass", "Plane_angle", "Power", "Pressure", "Radiation_exposure", "Radioactivity",
+ "Speed", "Temperature", "Temperature_delta", "Time", "Voltage", "Volume"]
 ```
 
 #### GET /magnitudes/{magnitude}/units

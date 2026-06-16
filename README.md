@@ -1,9 +1,11 @@
 # Unit-Converter
 
-A multi-magnitude unit converter for **Area, Data, Energy, Length, Mass, Power, Pressure, Time,
-and Volume**, plus **live currency conversion** via the Frankfurter API. Structured around a pure
-Python core with no third-party runtime dependencies, and optional front-ends for GUI interaction,
-REST API access, and MCP agent access.
+A multi-magnitude unit converter for **25 scientific magnitudes** (Absorbed dose, Acceleration,
+Amount of substance, Area, Data, Density, Electric charge, Electric resistance, Energy, Equivalent dose,
+Force, Frequency, Length, Mass, Plane angle, Power, Pressure, Radiation exposure, Radioactivity, Speed,
+Temperature, Temperature delta, Time, Voltage, Volume), plus **live currency conversion** via the Frankfurter API. Structured
+around a pure Python core with no third-party runtime dependencies, and optional front-ends for GUI
+interaction, REST API access, and MCP agent access.
 
 ---
 
@@ -113,7 +115,11 @@ unit-converter-gui
 Launches the PySide6 desktop application. Requires the `[gui]` optional group.
 Equivalent invocation from source: `python -m unit_converter.gui.app`.
 
-**Features:** Bidirectional live conversion, order-of-magnitude prefixes (SI/IEC), digit sweep, conversion history and favorites, custom units, right-click context menu (Settings, History, Add Custom Unit, About, Exit), and Light/Dark theming with per-widget color picker. See [docs/usage-guide.md](docs/usage-guide.md) for detailed usage.
+**Features:** Bidirectional live conversion, order-of-magnitude prefixes (SI/IEC), digit sweep (max 10 decimal places
+unless sweep control points deeper), conversion history (capped at 100 non-favorite entries; favorites are exempt and
+never dropped) with a Favorites toggle and right-click context menu (Delete, Add/Remove from Favorites, Run again),
+custom units, right-click window menu (Settings, History, Add Custom Unit, About, Exit), and Light/Dark theming with
+per-widget color picker. See [docs/usage-guide.md](docs/usage-guide.md) for detailed usage.
 
 ### REST + MCP server (Streamable HTTP)
 
