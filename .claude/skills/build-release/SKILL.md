@@ -7,6 +7,21 @@ description: >
   asked to "build a release", "make the wheel", "build the executable", or to verify the build
   pipeline before tagging. Pairs with the packaging-builder agent.
 version: 0.1.0
+principles_applied:
+  inherited:
+    - P1 — Source-of-Truth Grounding
+    - P2 — Full Determinism
+    - P3 — Systematicity
+    - P4 — Consistency
+    - P5 — Context Budget Discipline
+    - P6 — Self-Containment
+    - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
 ---
 # Build Release
 
@@ -71,3 +86,4 @@ External dependencies (must be available in the execution environment):
 ## Sources
 - `CLAUDE.md` (invariants 4, 6; build/install commands), `docs/BACKLOG.md` (UC-B01, UC-B02), `pyproject.toml` (`[build-system]`, package-data), `packaging/UConverter.spec`, `packaging/build.py`.
 - references/claude.md §SKILL: frontmatter, description rules, body structure.
+- Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS.

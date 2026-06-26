@@ -47,14 +47,27 @@ to every request:
   orchestrator subagent, which declares asset design out of scope.
 
 ## Principles Applied
+Deployment target: `claude_code` (real `.claude/` tree — agents, skills, hooks, and `settings.json` are live deployed assets, not specs).
+External dependency (C7): `$HOME/.claude/hooks/claude-orchestration-contract.py` is the user-level global SessionStart hook — relied upon as-is; no per-project copy required or created.
+Engineering disciplines (R17) and programmatic determinism (R18/P11): `repo-enhancer/orchestrator.md` CONVENTIONS — hooks enforce deterministic invariants; prefer scripts/tools over prose for deterministic checks.
+
 - P1 Source-of-Truth Grounding — architecture and commands below are verified
   against the real code (`unit_converter/core/converter.py`, `pyproject.toml`),
   not assumed; read the named file before acting on it.
+- P2 Full Determinism — hooks and gate commands produce deterministic outcomes; no inference-based invariant checks.
+- P3 Systematicity — the operating contract above is the mandatory execution order from the first turn.
+- P4 Consistency — the same agent roster, invariants, and gate commands apply across all sessions.
 - P5 Context Budget Discipline — target files by search (Grep/Glob) and read only
   the region you need; this guide exists so agents need not re-discover layout.
 - P6 Self-Containment — invariants, gate commands, and agent roles are stated here
   with explicit file paths; no implicit cross-references.
 - P7 Reference Hygiene — every path named here resolves in the tree.
+- P8 Principles Inheritance — every agent and skill in `.claude/` carries a Principles Applied block derived from this canonical list.
+- P9 Role Separation — active session coordinates and gates; dev agents implement; reviewer gates; operator runs the service. No ad-hoc cross-role edits.
+- P10 Exit-Status Determinism — reviewer returns PASS/FAIL; agents return COMPLETED/BLOCKED; no soft verdicts.
+- P11 Programmatic Determinism — hooks enforce core purity, secrets/artifacts, and Tkinter regression deterministically, not by prose reasoning.
+- P12 Maximal-Effort Completeness — carry every request to a definitive end; fully cover the requirement (operating contract above; ai-execution-discipline.md Rule 7).
+- P13 Token Economy — economical prose; this guide provides layout so agents target-by-search rather than loading the full tree.
 
 ## Architecture (one core, many faces)
 - **Pure core** — `unit_converter/core/converter.py` (`list_magnitudes`,
@@ -149,12 +162,15 @@ field may be overridden by `CLAUDE_CODE_SUBAGENT_MODEL` and is ignored on some C
   acceptance-criteria-driven done, context-budget (target-by-search, checkpoint ~70%, Gleaner=5).
 - **python-repo-conventions.md** — stdlib-first, typing, headless-core purity, deterministic offline
   tests, no secrets, optional-dep groups, affine note.
+- **sdd-constitution.md** — SDD stage-gate rules governing the specify→clarify→plan→tasks→analyze→checklist pipeline.
+- **pyside6-best-practices.md** — PySide6 patterns; referenced by `gui-dev`.
 
 ### Skills (`.claude/skills/`)
 - **add-unit-or-magnitude** — extend `magnitudes.toml` (unit/magnitude) + locking tests + gate.
 - **expose-op** — thread a core fn/param through service→REST→derived MCP tool + error mapping + tests.
 - **run-quality-gate** (`scripts/quality_gate.py`) — pytest+coverage + invariant grep sweep → PASS/FAIL.
 - **build-release** (`scripts/build_release.py`) — wheel + PyInstaller build, install/import + clean-tree verify.
+- **SDD pipeline:** `specify`→`clarify`→`plan`→`tasks`→`analyze`→`checklist`; `analyze`/`checklist` back-ended by `run-quality-gate`; governed by `.claude/instructions/sdd-constitution.md`.
 
 ### Hooks (`.claude/settings.json` + `.claude/hooks/`) — harness-enforced invariants
 - **headless_core_guard.py** (PreToolUse) — blocks a GUI/transport import into `unit_converter/core/*`

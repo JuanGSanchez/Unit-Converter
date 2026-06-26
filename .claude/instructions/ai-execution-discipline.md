@@ -4,14 +4,24 @@ Behavioral contract all in-repo agents reference instead of restating. Counters 
 execution and protects the context budget. Scope: every code/data/test/doc/build action in this repo.
 
 ## Principles Applied
+Engineering disciplines (R17) and programmatic determinism (R18/P11): `repo-enhancer/orchestrator.md` CONVENTIONS.
+
 - P1 Source-of-Truth Grounding — act only on the real file you just read; backlog `File:line` refs are
   stale by policy (`docs/BACKLOG.md` preamble) — re-confirm before editing.
+- P2 Full Determinism — the verify→act→prove loop is a fixed protocol; no step skipped or inferred.
 - P3 Systematicity — the verify→act→prove loop below is the mandatory order for every change.
+- P4 Consistency — the same discipline (verify-before-edit, minimal change, done = all criteria met) applies across every agent and item.
 - P5 Context Budget Discipline — target by search; checkpoint at ~70%.
+- P6 Self-Containment — all rules stated here; no implicit agent-specific behavior assumed.
 - P7 Reference Hygiene — cite CLAUDE.md / BACKLOG IDs / file:symbol; never restate their content here.
-- Maximal-Effort Completeness — carry every task, doubt, and investigation to a definitive end and
+- P8 Principles Inheritance — every agent referencing this instruction applies these rules.
+- P9 Role Separation — act within the declared owned surface; cross-boundary edits require escalation.
+- P10 Exit-Status Determinism — done means every acceptance criterion is explicitly met with evidence.
+- P11 Programmatic Determinism — run deterministic gates/scripts rather than reasoning about their result (Rule 6).
+- P12 Maximal-Effort Completeness — carry every task, doubt, and investigation to a definitive end and
   fully cover the item; governs coverage/depth, not verbosity, and never overrides Rule 3 (minimal
-  diff). Relax only on explicit user scope-down. (asset-metaprompting P9 / orchestrator-design P12.)
+  diff). Relax only on explicit user scope-down.
+- P13 Token Economy — acceptance checklists and gate output quoted concisely; no padding.
 
 ## Rules
 

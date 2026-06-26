@@ -7,6 +7,11 @@ Fires on Edit/Write. BLOCKS (exit 2) if:
     (api key / token / secret / password assigned a non-placeholder literal).
 
 Non-fatal on its own errors (exit 0). Block protocol: exit 2 + reason on stderr.
+
+## Principles Applied
+P1 Source-of-Truth Grounding (blocks writes that violate the repo's no-secrets/no-artifacts
+rule — CLAUDE.md invariant 6 / UC-B02; the rule is the source of truth, not agent judgment) |
+P2 Full Determinism | P8 Principles Inheritance | P11 Programmatic Determinism.
 """
 from __future__ import annotations
 

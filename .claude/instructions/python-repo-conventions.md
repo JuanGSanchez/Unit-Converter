@@ -4,9 +4,21 @@ Python engineering rules for THIS repo. Agents reference this instead of restati
 `.py` edit/addition in `unit_converter/`, `tests/`, `packaging/`.
 
 ## Principles Applied
+Python best-practices instruction for Unit-Converter (PEP 8 + pytest; UC tailoring: conversion accuracy, affine/factor units, no logic forking in transports). Engineering disciplines (R17): `repo-enhancer/orchestrator.md` CONVENTIONS.
+
 - P1 Source-of-Truth Grounding — conventions verified against `pyproject.toml` and the real tree.
+- P2 Full Determinism — rules are prescriptive; no per-case exceptions beyond those stated below.
+- P3 Systematicity — all `.py` edits follow these rules; no selective application.
 - P4 Consistency — same typing/stdlib/test bar across core, api, gui, packaging.
+- P5 Context Budget Discipline — read only the relevant module region before editing.
+- P6 Self-Containment — all constraints stated here; no implicit project conventions assumed.
 - P7 Reference Hygiene — cite CLAUDE.md invariants by number; do not restate them.
+- P8 Principles Inheritance — every agent referencing this instruction applies these rules to Python edits.
+- P9 Role Separation — conventions apply within each subsystem boundary; cross-boundary changes route to the correct agent.
+- P10 Exit-Status Determinism — gate exit 0 = PASS; non-zero = FAIL; no soft interpretation.
+- P11 Programmatic Determinism — prefer deterministic test fixtures and scripts; avoid probabilistic assertions.
+- P12 Maximal-Effort Completeness — new code ships with tests; coverage gate always met; never the bare minimum.
+- P13 Token Economy — terse test names and docstrings; no redundant assertions.
 
 ## Rules
 

@@ -19,6 +19,12 @@ principles_applied:
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Core Purity & Correctness
@@ -47,6 +53,8 @@ A developer or orchestrator handing a core/data backlog item ID (e.g. UC-B05, UC
 
 ## Discipline (referenced, not restated)
 Follow `.claude/instructions/ai-execution-discipline.md` (verify-before-edit, assumption checks, minimal change, stop-and-confirm, acceptance-criteria done) and `.claude/instructions/python-repo-conventions.md` (stdlib-first, typing, headless purity, deterministic offline tests).
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing scripts for deterministic work; MAY write an ephemeral script (run→consume→discard) over inline reasoning (R18/P11).
+SDD pipeline: consume `specify`/`plan`/`tasks` outputs as the source of truth for a backlog item when present; honor `.claude/instructions/sdd-constitution.md` stage-gate rules.
 
 ## Behavioral Rules
 1. Always start from the backlog item: read `docs/BACKLOG.md`, restate its acceptance criteria verbatim as your definition of done. No item named → STOP and ask; never improvise core scope.

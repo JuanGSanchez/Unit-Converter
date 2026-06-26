@@ -7,6 +7,11 @@ transport import (PySide/PyQt/tkinter/fastapi/mcp/fastmcp). Otherwise exits 0 (a
 
 Non-fatal on its own errors: any parse/IO failure exits 0 so the hook never wedges the session.
 Block protocol: exit code 2 + reason on stderr (Claude Code feeds stderr back to the model).
+
+## Principles Applied
+P2 Full Determinism | P8 Principles Inheritance | P9 Role Separation (enforces the headless-core
+boundary; harness-level guard for CLAUDE.md invariant 1 so only core-dev changes core) |
+P11 Programmatic Determinism (this hook IS the deterministic enforcement mechanism).
 """
 from __future__ import annotations
 

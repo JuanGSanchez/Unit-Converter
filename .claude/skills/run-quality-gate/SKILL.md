@@ -8,10 +8,26 @@ description: >
   the quality gate", "check coverage", "verify invariants", or as the test-author/reviewer agents'
   done-check.
 version: 0.1.0
+principles_applied:
+  inherited:
+    - P1 — Source-of-Truth Grounding
+    - P2 — Full Determinism
+    - P3 — Systematicity
+    - P4 — Consistency
+    - P5 — Context Budget Discipline
+    - P6 — Self-Containment
+    - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
 ---
 # Run Quality Gate
 
 One deterministic command sweep that proves the Unit-Converter coverage gate and the grep-checkable invariants, returning PASS/FAIL with evidence. Read-only except producing a report.
+This skill is the execution backend for the `/analyze` (`.claude/skills/analyze/SKILL.md`) and `/checklist` (`.claude/skills/checklist/SKILL.md`) SDD pipeline skills.
 
 ## Workflow
 
@@ -80,3 +96,4 @@ External dependencies (must be available in the execution environment):
 ## Sources
 - `CLAUDE.md` (invariants 1,5,6; gate commands), `docs/BACKLOG.md` (UC-B04, UC-B06, UC-B07), `pyproject.toml` (coverage config).
 - references/claude.md §SKILL: frontmatter, description rules, body structure.
+- Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS.

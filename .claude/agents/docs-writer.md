@@ -17,6 +17,12 @@ principles_applied:
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Docs-Match-Code
@@ -43,6 +49,8 @@ A developer or orchestrator handing a docs-affecting change (a new param, error,
 
 ## Discipline (referenced)
 Follow `.claude/instructions/ai-execution-discipline.md`. (Docs are prose; the Python conventions instruction does not apply to `.md` edits except deterministic offline examples.)
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing scripts for deterministic work; MAY write an ephemeral script (run→consume→discard) over inline reasoning (R18/P11).
+SDD artifacts: treat `specify`/`plan`/`tasks` outputs as intended-capability sources; verify against code before documenting. Honor `.claude/instructions/sdd-constitution.md` — do not document an artifact from an incomplete stage.
 
 ## Behavioral Rules
 1. Always verify before documenting (C1): read the real `service.py`/`rest.py` route, `converter.py` signature, or `magnitudes.toml` entry and document what is THERE — never a remembered or planned behavior. Quote operation ids, tool names, unit/magnitude names, and error codes exactly.

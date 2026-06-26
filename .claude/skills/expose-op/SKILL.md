@@ -8,6 +8,21 @@ description: >
   REST/MCP", or to surface a core capability to agents. Pairs with the access-dev agent. A
   state-changing/network op is GATED on explicit re-approval.
 version: 0.1.0
+principles_applied:
+  inherited:
+    - P1 — Source-of-Truth Grounding
+    - P2 — Full Determinism
+    - P3 — Systematicity
+    - P4 — Consistency
+    - P5 — Context Budget Discipline
+    - P6 — Self-Containment
+    - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
 ---
 # Expose Op
 
@@ -78,3 +93,4 @@ External dependencies (must be available in the execution environment):
 - `CLAUDE.md` (invariant 3), `docs/BACKLOG.md` (UC-I01, UC-I02, gated UC-I03/UC-I05, UC-B07), `docs/agent-operating-doc.md` (16-op contract, error table).
 - `.claude/instructions/ai-execution-discipline.md` (gate / stop-and-confirm).
 - references/claude.md §SKILL: frontmatter, description rules, body structure.
+- Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS.

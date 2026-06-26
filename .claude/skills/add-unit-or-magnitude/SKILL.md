@@ -7,6 +7,21 @@ description: >
   "add a unit", "add a magnitude", "add <unit> to <magnitude>", or to extend `magnitudes.toml`.
   Pairs with the core-dev agent. For an affine (temperature/offset) magnitude, follow the affine note.
 version: 0.1.0
+principles_applied:
+  inherited:
+    - P1 — Source-of-Truth Grounding
+    - P2 — Full Determinism
+    - P3 — Systematicity
+    - P4 — Consistency
+    - P5 — Context Budget Discipline
+    - P6 — Self-Containment
+    - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
 ---
 # Add Unit or Magnitude
 
@@ -75,3 +90,4 @@ External dependencies (must be available in the execution environment):
 - `CLAUDE.md` (invariants 2, 4, 5), `docs/BACKLOG.md` (UC-I03 custom units, UC-I04 affine).
 - `.claude/instructions/python-repo-conventions.md` (affine note, deterministic tests).
 - references/claude.md §SKILL: frontmatter, description rules, body structure.
+- Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS.
