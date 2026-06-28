@@ -542,6 +542,90 @@ class TestBatchDialogSmoke:
         except Exception as exc:
             pytest.fail(f"Mode switch failed: {exc}")
 
+    def _make_dialog_with_rows(self):
+        """Build a _BatchDialog with one result row ready for export."""
+        from unit_converter.core.converter import list_units
+        from unit_converter.gui.main_window import _BatchDialog
+
+        info = list_units("Length")
+        units = info["units"]
+        dlg = _BatchDialog(
+            magnitude="Length",
+            from_unit=units[0],
+            to_unit=units[1] if len(units) > 1 else units[0],
+            all_units=units,
+            parent=None,
+        )
+        dlg._rows = [
+            BatchRow(
+                index=0, unit=None, input_value="1",
+                output_value=1.0, output_text="1", error=None,
+            )
+        ]
+        return dlg
+
+    def test_save_failure_uses_inline_status_not_messagebox(self, app, monkeypatch) -> None:
+        """SPEC-R2: a CSV write failure shows an inline error, not a modal popup."""
+        import unit_converter.gui.main_window as mw
+
+        dlg = self._make_dialog_with_rows()
+        try:
+            # Force the save dialog to return a path, the write to fail, and
+            # spy on QMessageBox.warning to prove it is never called.
+            monkeypatch.setattr(
+                mw.QFileDialog, "getSaveFileName",
+                staticmethod(lambda *a, **k: ("C:/nope/out.csv", "")),
+            )
+
+            def _boom(*a, **k):
+                raise OSError("disk full")
+
+            monkeypatch.setattr("builtins.open", _boom)
+
+            called = {"warning": False}
+            monkeypatch.setattr(
+                mw.QMessageBox, "warning",
+                staticmethod(lambda *a, **k: called.__setitem__("warning", True)),
+            )
+
+            dlg._on_save()
+
+            assert called["warning"] is False, (
+                "Save failure must NOT raise a modal QMessageBox (SPEC-R2/SPEC-19)"
+            )
+            assert not dlg._status_label.isHidden()
+            assert "disk full" in dlg._status_label.text()
+        finally:
+            dlg.close()
+
+    def test_save_success_shows_inline_status(self, app, tmp_path, monkeypatch) -> None:
+        """A successful save reports inline, not via a popup."""
+        import unit_converter.gui.main_window as mw
+
+        dlg = self._make_dialog_with_rows()
+        out = tmp_path / "out.csv"
+        try:
+            monkeypatch.setattr(
+                mw.QFileDialog, "getSaveFileName",
+                staticmethod(lambda *a, **k: (str(out), "")),
+            )
+            dlg._on_save()
+            assert out.exists()
+            assert not dlg._status_label.isHidden()
+            assert "Saved" in dlg._status_label.text()
+        finally:
+            dlg.close()
+
+    def test_copy_shows_inline_status(self, app) -> None:
+        """Copy reports a non-blocking inline confirmation."""
+        dlg = self._make_dialog_with_rows()
+        try:
+            dlg._on_copy()
+            assert not dlg._status_label.isHidden()
+            assert "Copied" in dlg._status_label.text()
+        finally:
+            dlg.close()
+
     def test_no_inline_settoolTip_in_main_window(self) -> None:
         """Source guard: no inline setToolTip( calls in main_window.py.
 

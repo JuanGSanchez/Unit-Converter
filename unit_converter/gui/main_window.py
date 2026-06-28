@@ -1038,6 +1038,7 @@ class _BatchDialog(QDialog):
         self._all_units = all_units
         self._sweep_text = sweep_text
         self._rows: list[_BatchRow] = []
+        self._colors = _colors
 
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACING_MAIN)
@@ -1109,6 +1110,16 @@ class _BatchDialog(QDialog):
         _register_info(self._table, "batch_results_table")
         layout.addWidget(self._table, stretch=1)
 
+        # ---- Inline status surface (SPEC-R2 / SPEC-19) ----------------------
+        # Non-blocking, themed feedback for save/copy success and failure.
+        # Replaces the former modal QMessageBox on the save path so the batch
+        # dialog reports errors the same non-blocking way the main window does.
+        self._status_label = QLabel("")
+        self._status_label.setWordWrap(True)
+        self._status_label.setVisible(False)
+        _register_info(self._status_label, "batch_status_label")
+        layout.addWidget(self._status_label)
+
         # ---- Export buttons -------------------------------------------------
         export_row = QHBoxLayout()
         self._copy_btn = QPushButton("Copy table")
@@ -1149,6 +1160,7 @@ class _BatchDialog(QDialog):
         # Reset the table when switching modes
         self._table.setRowCount(0)
         self._rows = []
+        self._clear_status()
 
     # ------------------------------------------------------------------
     # Run batch
@@ -1156,6 +1168,7 @@ class _BatchDialog(QDialog):
 
     def _on_run(self) -> None:
         """Execute the batch conversion and populate the results table."""
+        self._clear_status()
         mode = self._mode_combo.currentText()
         from_unit = self._from_unit_combo.currentText()
 
@@ -1226,6 +1239,30 @@ class _BatchDialog(QDialog):
     # Export helpers
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Inline status surface (SPEC-R2 / SPEC-19)
+    # ------------------------------------------------------------------
+
+    def _set_status(self, text: str, *, is_error: bool = False) -> None:
+        """
+        Show a non-blocking, themed message in the inline status label.
+
+        Colour derives from the dialog's active theme (``fg_title`` accent);
+        errors are rendered bold.  No modal popup, no hard-coded colour.
+        """
+        accent = self._colors.get("fg_title", "#1E5AA8")
+        weight = "bold" if is_error else "normal"
+        self._status_label.setStyleSheet(
+            f"color: {accent}; font-weight: {weight};"
+        )
+        self._status_label.setText(text)
+        self._status_label.setVisible(bool(text))
+
+    def _clear_status(self) -> None:
+        """Hide and empty the inline status label."""
+        self._status_label.setText("")
+        self._status_label.setVisible(False)
+
     def _current_headers(self) -> list[str]:
         """Return the BatchRow field names matching the current table columns."""
         mode = self._mode_combo.currentText()
@@ -1241,6 +1278,7 @@ class _BatchDialog(QDialog):
         csv_text = _rows_to_csv(self._rows, self._current_headers())
         QApplication.clipboard().setText(csv_text)
         logger.debug("_BatchDialog: copied %d rows to clipboard", len(self._rows))
+        self._set_status(f"Copied {len(self._rows)} rows to clipboard.")
 
     def _on_save(self) -> None:
         """Open a file-save dialog and write the results to a CSV file."""
@@ -1259,13 +1297,12 @@ class _BatchDialog(QDialog):
             with open(path, "w", encoding="utf-8", newline="") as fh:
                 fh.write(csv_text)
             logger.info("_BatchDialog: saved %d rows to %r", len(self._rows), path)
+            self._set_status(f"Saved {len(self._rows)} rows to {path}")
         except OSError as exc:
+            # SPEC-R2 / SPEC-19: report non-fatal write failures through the
+            # inline themed surface, not a modal popup window.
             logger.error("_BatchDialog: failed to save CSV to %r: %s", path, exc)
-            QMessageBox.warning(
-                self,
-                "Save failed",
-                f"Could not write file:\n{exc}",
-            )
+            self._set_status(f"Could not write file: {exc}", is_error=True)
 
 
 # ---------------------------------------------------------------------------

@@ -209,6 +209,10 @@ INFO_TEXTS: dict[str, str] = {
     "batch_save_btn": (
         "Save the results table to a CSV file."
     ),
+    "batch_status_label": (
+        "Status of the most recent copy or save action.\n"
+        "Errors are shown here inline rather than in a popup window."
+    ),
 }
 
 #: Frozenset of all defined keys — use in tests to assert coverage.
