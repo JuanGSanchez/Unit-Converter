@@ -21,7 +21,7 @@ Public API
 
 ``dialog_default_size(dialog_type: str) -> tuple[int, int]``
     Return the canonical ``(width, height)`` for a named dialog type.
-    Keys: ``"history"``, ``"add_unit"``, ``"settings"``.
+    Keys: ``"history"``, ``"add_unit"``, ``"settings"``, ``"search"``.
 
 ``center_dialog_on_parent(dialog, default_w: int, default_h: int) -> None``
     Resize *dialog* to ``(default_w, default_h)`` and center it on its
@@ -100,6 +100,7 @@ _DIALOG_DEFAULTS: dict[str, tuple[int, int]] = {
     "history":  (430, 355),  # _HistoryDialog — slightly wider + taller than old 420×340
     "add_unit": (315, 190),  # _AddUnitDialog — slightly larger than old 300×180
     "settings": (450, 500),  # _SettingsDialog — slightly larger than old 430×480
+    "search":   (380, 340),  # _SearchDialog (SPEC-14) — wide enough for full unit names
 }
 
 
@@ -109,7 +110,7 @@ def dialog_default_size(dialog_type: str) -> tuple[int, int]:
     Parameters
     ----------
     dialog_type:
-        One of ``"history"``, ``"add_unit"``, ``"settings"``.
+        One of ``"history"``, ``"add_unit"``, ``"settings"``, ``"search"``.
 
     Returns
     -------

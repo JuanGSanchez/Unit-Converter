@@ -155,6 +155,23 @@ INFO_TEXTS: dict[str, str] = {
         "full expression: <from_value> <from_unit> = <to_value> <to_unit>.\n"
         "Shortcut: Ctrl+C (when no text is selected in an entry field)."
     ),
+
+    # --- Unit search dialog (SPEC-14) --------------------------------------
+    "search_dialog": (
+        "Search for a unit or magnitude by name.\n"
+        "Typing selects the matching magnitude and unit in the converter."
+    ),
+    "search_edit": (
+        "Type a unit or magnitude name to search across all categories.\n"
+        "Matching is case- and accent-insensitive."
+    ),
+    "search_results_list": (
+        "Matching units — select one and press Enter or click Apply\n"
+        "to configure the converter with that magnitude and unit."
+    ),
+    "search_apply_btn": (
+        "Apply the selected unit: sets the magnitude and From-unit selectors."
+    ),
 }
 
 #: Frozenset of all defined keys — use in tests to assert coverage.

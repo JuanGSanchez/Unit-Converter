@@ -122,6 +122,11 @@ from unit_converter.gui.geometry import (
     golden_ratio_size,
 )
 from unit_converter.gui.resources import logo_path
+from unit_converter.gui.unit_search import (
+    SearchHit,
+    build_search_index,
+    search as _search_units,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -833,6 +838,116 @@ class _SettingsDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Unit-search dialog (SPEC-14)
+# ---------------------------------------------------------------------------
+
+class _SearchDialog(QDialog):
+    """
+    Small search dialog for finding units across all magnitudes (SPEC-14).
+
+    Opened from the right-click context menu ("Find Unit...").  The search
+    index is passed in at construction time (the MainWindow builds it once and
+    caches it on ``self._search_index``).
+
+    Flow
+    ----
+    1. User types in the search field; the results list updates on every
+       keystroke via ``_on_query_changed``.
+    2. User selects a row and clicks "Apply" (or presses Enter / double-clicks)
+       to accept the dialog.
+    3. The caller reads :meth:`selected_hit` and applies it to the converter.
+
+    Tooltip invariant
+    -----------------
+    Every interactive widget registers its tooltip via ``_register_info``.
+    No inline setToolTip literals — all text comes from the registry.
+    """
+
+    def __init__(
+        self,
+        index: list[SearchHit],
+        parent: "QWidget | None" = None,
+        colors: "dict[str, str] | None" = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Find Unit")
+        _w, _h = dialog_default_size("search")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "search_dialog")
+
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
+
+        self._index = index
+        self._selected_hit: SearchHit | None = None
+
+        layout = QVBoxLayout(self)
+
+        # Search field
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Type to search units and magnitudes…")
+        _register_info(self._search_edit, "search_edit")
+        layout.addWidget(self._search_edit)
+
+        # Results list
+        self._results_list = QListWidget()
+        _register_info(self._results_list, "search_results_list")
+        layout.addWidget(self._results_list, stretch=1)
+
+        # Buttons
+        buttons = QDialogButtonBox()
+        self._apply_btn = buttons.addButton("Apply", QDialogButtonBox.AcceptRole)
+        _register_info(self._apply_btn, "search_apply_btn")
+        buttons.addButton(QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_apply)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        # Connections
+        self._search_edit.textChanged.connect(self._on_query_changed)
+        self._results_list.itemDoubleClicked.connect(self._on_apply)
+        # Enter key in the search field moves focus to list for keyboard
+        # navigation (user can then press Enter again via button default).
+        self._search_edit.returnPressed.connect(self._on_apply)
+
+        self._search_edit.setFocus()
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    def _on_query_changed(self, text: str) -> None:
+        """Re-run the search on every keystroke and repopulate the list."""
+        self._results_list.clear()
+        hits = _search_units(self._index, text, limit=50)
+        for hit in hits:
+            item = QListWidgetItem(f"{hit.magnitude}  —  {hit.unit}")
+            item.setData(Qt.UserRole, hit)
+            self._results_list.addItem(item)
+        # Auto-select the first result so Enter immediately applies it.
+        if self._results_list.count() > 0:
+            self._results_list.setCurrentRow(0)
+
+    def _on_apply(self) -> None:
+        """Accept the dialog if a result row is selected."""
+        current = self._results_list.currentItem()
+        if current is None:
+            return
+        hit = current.data(Qt.UserRole)
+        if isinstance(hit, SearchHit):
+            self._selected_hit = hit
+            self.accept()
+
+    # ------------------------------------------------------------------
+    # Public result accessor
+    # ------------------------------------------------------------------
+
+    def selected_hit(self) -> "SearchHit | None":
+        """Return the hit chosen by the user, or ``None`` if cancelled."""
+        return self._selected_hit
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -894,6 +1009,9 @@ class MainWindow(QWidget):
         self._val2: float = 0.0
         self._val1_old: float = 0.0
         self._val2_old: float = 0.0
+
+        # Lazily built once by _get_search_index (SPEC-14 / SPEC-21).
+        self._search_index: list[SearchHit] | None = None
 
         self._build_ui()
         self._connect_signals()
@@ -1151,6 +1269,10 @@ class MainWindow(QWidget):
         sc_paste = QShortcut(QKeySequence("Ctrl+V"), self)
         sc_paste.activated.connect(self._paste_value)
 
+        # Ctrl+F — open unit-search dialog (SPEC-14).
+        sc_find = QShortcut(QKeySequence("Ctrl+F"), self)
+        sc_find.activated.connect(self._show_search)
+
     # ------------------------------------------------------------------
     # Context menu (right-click)
     # ------------------------------------------------------------------
@@ -1160,6 +1282,7 @@ class MainWindow(QWidget):
         settings_action = menu.addAction("Settings...")
         menu.addSeparator()
         copy_action = menu.addAction("Copy result\tCtrl+C")
+        search_action = menu.addAction("Find Unit...\tCtrl+F")
         menu.addSeparator()
         history_action = menu.addAction("History / Favorites...")
         add_unit_action = menu.addAction("Add Custom Unit...")
@@ -1171,6 +1294,8 @@ class MainWindow(QWidget):
             self._show_settings()
         elif action == copy_action:
             self._copy_result()
+        elif action == search_action:
+            self._show_search()
         elif action == history_action:
             self._show_history()
         elif action == add_unit_action:
@@ -1179,6 +1304,63 @@ class MainWindow(QWidget):
             self._show_about()
         elif action == exit_action:
             self._exit()
+
+    def _get_search_index(self) -> list[SearchHit]:
+        """
+        Return the cached search index, building it on first call (SPEC-21).
+
+        The index is built exactly once from the core's discovery callables
+        (``list_magnitudes`` + ``list_units``) and cached on ``self._search_index``.
+        Subsequent calls return the cached list without rebuilding.
+        """
+        if self._search_index is None:
+            self._search_index = build_search_index(
+                _core.list_magnitudes,
+                _core.list_units,
+            )
+            logger.debug(
+                "Search index built: %d entries", len(self._search_index)
+            )
+        return self._search_index
+
+    def _show_search(self) -> None:
+        """
+        Open the unit-search dialog (SPEC-14).
+
+        On acceptance, applies the selected hit: sets the magnitude combo,
+        waits for ``_on_magnitude_changed`` to populate the unit combos, then
+        selects the matching unit in ``_cb_unit1``.
+        """
+        dlg = _SearchDialog(
+            index=self._get_search_index(),
+            parent=self,
+            colors=self._active_colors,
+        )
+        if dlg.exec() != QDialog.Accepted:
+            return
+        hit = dlg.selected_hit()
+        if hit is None:
+            return
+
+        # Set magnitude (triggers _on_magnitude_changed which populates unit combos)
+        mag_idx = self._cb_magnitude.findText(hit.magnitude)
+        if mag_idx < 0:
+            logger.warning(
+                "Search: magnitude %r not found in combo", hit.magnitude
+            )
+            return
+        self._cb_magnitude.setCurrentIndex(mag_idx)
+
+        # _on_magnitude_changed has now run; select the unit in cb_unit1
+        unit_idx = self._cb_unit1.findText(hit.unit)
+        if unit_idx >= 0:
+            self._cb_unit1.setCurrentIndex(unit_idx)
+        else:
+            logger.warning(
+                "Search: unit %r not found in combo after setting magnitude %r",
+                hit.unit,
+                hit.magnitude,
+            )
 
     def _show_settings(self) -> None:
         """Open the Settings dialog (TASK 2)."""
