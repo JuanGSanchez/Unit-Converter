@@ -21,8 +21,14 @@ Features:
 - Right-click context menu: Settings, History/Favorites, Add Custom Unit,
   About, and Exit.
 - Ctrl+Q exits the application.
+- Ctrl+C copies the conversion result to the clipboard (when no text is selected
+  in an entry field); falls back to the default QLineEdit copy otherwise.
+- Ctrl+V pastes a numeric value from the clipboard into the focused entry field,
+  then triggers conversion; garbage text is silently rejected.
 - Return/Enter triggers conversion.
 - All conversion math delegated to ``unit_converter.core.converter``.
+- Clipboard integration (SPEC-15): Ctrl+C copies the result expression; Ctrl+V
+  pastes a numeric value into the focused entry and triggers conversion.
 - Conversion history panel (UC-I07): recent conversions persist across sessions.
 - Custom-unit dialog: add user-defined units persisted to ~/.unit-converter/custom.toml.
 - Light/Dark theming: all colors driven from ``gui.theme``; user picks and
@@ -90,6 +96,10 @@ from unit_converter.core.history import (
 )
 from unit_converter.gui.history_menu import context_menu_actions as _ctx_actions
 from unit_converter.gui import theme as _theme
+from unit_converter.gui.clipboard import (
+    build_copy_expression as _build_copy_expression,
+    parse_pasted_number as _parse_pasted_number,
+)
 from unit_converter.gui.format_result import format_result as _format_result
 from unit_converter.gui.info_registry import register_info as _register_info
 from unit_converter.gui.theme_persist import (
@@ -1129,6 +1139,18 @@ class MainWindow(QWidget):
         sc_quit = QShortcut(QKeySequence("Ctrl+Q"), self)
         sc_quit.activated.connect(self._exit)
 
+        # Ctrl+C — copy result to clipboard (SPEC-15).
+        # Uses ShortcutContext.WindowShortcut so it fires at the window level, but
+        # _copy_result() guards against clobbering an active text selection inside
+        # an entry — if an entry has selected text the standard copy is allowed to
+        # proceed via the default QLineEdit handler (we simply do nothing here).
+        sc_copy = QShortcut(QKeySequence("Ctrl+C"), self)
+        sc_copy.activated.connect(self._copy_result)
+
+        # Ctrl+V — paste numeric value into the focused entry (SPEC-15).
+        sc_paste = QShortcut(QKeySequence("Ctrl+V"), self)
+        sc_paste.activated.connect(self._paste_value)
+
     # ------------------------------------------------------------------
     # Context menu (right-click)
     # ------------------------------------------------------------------
@@ -1136,6 +1158,8 @@ class MainWindow(QWidget):
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
         settings_action = menu.addAction("Settings...")
+        menu.addSeparator()
+        copy_action = menu.addAction("Copy result\tCtrl+C")
         menu.addSeparator()
         history_action = menu.addAction("History / Favorites...")
         add_unit_action = menu.addAction("Add Custom Unit...")
@@ -1145,6 +1169,8 @@ class MainWindow(QWidget):
         action = menu.exec(event.globalPos())
         if action == settings_action:
             self._show_settings()
+        elif action == copy_action:
+            self._copy_result()
         elif action == history_action:
             self._show_history()
         elif action == add_unit_action:
@@ -1218,6 +1244,90 @@ class MainWindow(QWidget):
     def _exit(self) -> None:
         """Clean Qt teardown — no cargo-cult del/gc dance."""
         QApplication.quit()
+
+    # ------------------------------------------------------------------
+    # Clipboard integration (SPEC-15)
+    # ------------------------------------------------------------------
+
+    def _copy_result(self) -> None:
+        """
+        Copy the current conversion result to the system clipboard (SPEC-15).
+
+        Behaviour
+        ---------
+        - If the focused widget is an entry field (``_entry1`` or ``_entry2``)
+          with selected text, this method does nothing — the standard
+          QLineEdit Ctrl+C handler takes care of selection-copy.
+        - Otherwise, copies a full human-readable expression::
+
+              "<from_value> <from_unit> = <to_value> <to_unit>"
+
+          using :func:`unit_converter.gui.clipboard.build_copy_expression`.
+
+        The "To" slot result (``_entry2``) is the copy target when the user
+        edits the "From" field (slot 1), which is the normal direction.
+        If the magnitude selector is at ``*Select magnitude*`` no text is
+        copied and the method returns silently.
+        """
+        # Guard: if any entry has an active text selection, let the native
+        # QLineEdit copy handle it (do not interfere).
+        focus = QApplication.focusWidget()
+        for entry in (self._entry1, self._entry2):
+            if focus is entry and entry.hasSelectedText():
+                # Let the default handler proceed — we do nothing.
+                return
+
+        magnitude = self._cb_magnitude.currentText()
+        if magnitude == "*Select magnitude*":
+            return
+
+        from_value = self._entry1.text()
+        from_unit = self._cb_unit1.currentText()
+        to_value = self._entry2.text()
+        to_unit = self._cb_unit2.currentText()
+
+        expression = _build_copy_expression(from_value, from_unit, to_value, to_unit)
+        QApplication.clipboard().setText(expression)
+        logger.debug("Clipboard: copied %r", expression)
+
+    def _paste_value(self) -> None:
+        """
+        Paste a numeric value from the clipboard into the focused entry (SPEC-15).
+
+        Behaviour
+        ---------
+        - Reads the system clipboard text and passes it through
+          :func:`unit_converter.gui.clipboard.parse_pasted_number`.
+        - If the result is ``None`` (garbage / non-numeric / non-finite), the
+          paste is silently rejected — no popup, consistent with SPEC-19/SPEC-01.
+          A debug log message records the rejected text.
+        - If valid, populates the focused entry field (``_entry1`` or
+          ``_entry2``) and triggers conversion via ``_unit_converter``.
+        - If no entry field is focused, attempts ``_entry1`` as the default
+          target (consistent with the primary "From" direction).
+        """
+        clipboard_text = QApplication.clipboard().text()
+        value = _parse_pasted_number(clipboard_text)
+        if value is None:
+            logger.debug(
+                "Clipboard paste rejected (non-numeric): %r", clipboard_text
+            )
+            return
+
+        focus = QApplication.focusWidget()
+        if focus is self._entry2:
+            target = self._entry2
+            slot = 2
+        else:
+            # Default target: entry1 (covers focus on a non-entry widget or entry1)
+            target = self._entry1
+            slot = 1
+
+        if not target.isEnabled():
+            return
+
+        target.setText(str(value))
+        self._unit_converter(slot)
 
     # ------------------------------------------------------------------
     # Magnitude selection

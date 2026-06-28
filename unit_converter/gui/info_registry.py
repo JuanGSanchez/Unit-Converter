@@ -68,8 +68,9 @@ INFO_TEXTS: dict[str, str] = {
 
     # --- Numeric entry fields ----------------------------------------------
     "num_entry": (
-        "Write or press Enter\n"
-        "to run the conversion."
+        "Write or press Enter to run the conversion.\n"
+        "Ctrl+C copies the result to the clipboard.\n"
+        "Ctrl+V pastes a numeric value into this field."
     ),
 
     # --- Magnitude selector ------------------------------------------------
@@ -146,6 +147,13 @@ INFO_TEXTS: dict[str, str] = {
     ),
     "settings_apply_btn": (
         "Apply the current colours to the window immediately."
+    ),
+
+    # --- Clipboard actions (SPEC-15) ---------------------------------------
+    "copy_result_action": (
+        "Copy the conversion result to the clipboard as a\n"
+        "full expression: <from_value> <from_unit> = <to_value> <to_unit>.\n"
+        "Shortcut: Ctrl+C (when no text is selected in an entry field)."
     ),
 }
 
