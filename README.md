@@ -48,7 +48,7 @@ delegate every computation to it.
 - **Compound / derived units** — parse and convert expressions such as `km/h → m/s`.
 - **Custom user-defined units** — add units at runtime via the API or GUI; persisted to `~/.unit-converter/custom.toml`.
 - **Conversion history + favorites** — recent conversions persist across sessions; entries can be favorited and labeled.
-- **PySide6 GUI with hover tooltips** — every widget carries a `QToolTip` description.
+- **PySide6 GUI** — Bidirectional live conversion, order-of-magnitude controls, digit sweep, conversion history panel with favorites, custom-unit dialog, Light/Dark theming. Centralized help via hover tooltips, keyboard focus, and keyboard shortcuts. Right-click context menu includes Find Unit (Ctrl+F, case-insensitive search), Batch Convert (multi-value and one-to-all-units modes with CSV export), and clipboard integration (Ctrl+C to copy results, Ctrl+V to paste numeric input).
 
 ---
 
@@ -115,11 +115,7 @@ unit-converter-gui
 Launches the PySide6 desktop application. Requires the `[gui]` optional group.
 Equivalent invocation from source: `python -m unit_converter.gui.app`.
 
-**Features:** Bidirectional live conversion, order-of-magnitude prefixes (SI/IEC), digit sweep (max 10 decimal places
-unless sweep control points deeper), conversion history (capped at 100 non-favorite entries; favorites are exempt and
-never dropped) with a Favorites toggle and right-click context menu (Delete, Add/Remove from Favorites, Run again),
-custom units, right-click window menu (Settings, History, Add Custom Unit, About, Exit), and Light/Dark theming with
-per-widget color picker. See [docs/usage-guide.md](docs/usage-guide.md) for detailed usage.
+**Features:** Bidirectional live conversion, order-of-magnitude prefixes (SI/IEC), digit sweep (max 10 decimal places unless sweep control points deeper), conversion history (capped at 100 non-favorite entries; favorites are exempt and never dropped) with Favorites toggle, custom units, keyboard shortcuts (Ctrl+C/Ctrl+V/Ctrl+F/Return/Ctrl+Q), right-click context menu (Settings, Copy result, Find Unit, Batch convert, History/Favorites, Add Custom Unit, About, Exit), and Light/Dark theming with per-widget color picker. See [docs/usage-guide.md](docs/usage-guide.md) for detailed usage.
 
 ### REST + MCP server (Streamable HTTP)
 

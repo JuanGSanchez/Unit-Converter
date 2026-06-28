@@ -13,10 +13,13 @@ This guide covers all three ways to use Unit-Converter: the **PySide6 desktop GU
    - [Hover tooltips](#hover-tooltips)
    - [Changing the order of magnitude](#changing-the-order-of-magnitude)
    - [Digit sweep](#digit-sweep)
+   - [Hover tooltips and help](#hover-tooltips-and-help)
    - [Keyboard shortcuts](#keyboard-shortcuts)
-   - [Context menu](#context-menu)
+   - [Context menu (right-click)](#context-menu-right-click)
    - [History dialog and Favorites toggle](#history-dialog-and-favorites-toggle)
    - [Settings and theming](#settings-and-theming)
+   - [Find Unit search (Ctrl+F)](#find-unit-search-ctrlf)
+   - [Batch conversion (Batch convert...)](#batch-conversion-batch-convert)
    - [Input clamping](#input-clamping)
 3. [Part B: Using the REST API](#part-b-using-the-rest-api)
    - [Starting the REST server](#starting-the-rest-server)
@@ -59,10 +62,13 @@ unit-converter-gui
 - Real-time bidirectional conversion
 - Visual magnitude and unit selection
 - Scroll-based order-of-magnitude and digit-sweep controls
-- Hover tooltips on every widget
+- Centralized help: hover tooltips, keyboard focus, and keyboard shortcuts (Ctrl+C/V/F/Q)
 - History panel with favorites and context menu actions
 - Custom unit dialog
 - Light/Dark themes with per-widget color picker
+- Unit search with Find Unit (Ctrl+F) — case- and accent-insensitive substring matching
+- Batch conversion: multi-value or one-to-all-units with CSV export
+- Clipboard integration: Ctrl+C copies results, Ctrl+V pastes numeric input
 
 **GUI-only features:** Run again, Delete history entry, Right-click context menus for history actions.
 
@@ -126,11 +132,14 @@ Requires the `[gui]` optional dependency group (`pip install "unit-converter[gui
    updates in real time (bidirectional conversion).
 4. Conversion is live — no submit button is needed.
 
-### Hover tooltips
+### Hover tooltips and help
 
-Every widget (magnitude selector, unit selectors, order controls, entry fields, sweep
-control) carries a `QToolTip` description. Hover the mouse over any control to see its
-purpose and valid inputs.
+Every interactive widget (magnitude selector, unit selectors, order controls, entry fields, sweep control) displays help text through:
+- **Hover tooltip** — mouse over the control to see its purpose and valid inputs.
+- **Keyboard focus** — Tab to a control and its tooltip appears (accessible description for screen readers).
+- **WhatsThis** — keyboard users can press `?` to see detailed help text.
+
+All help text is centralized in a single registry and consistently themed.
 
 ### Changing the order of magnitude
 
@@ -162,21 +171,27 @@ position, use the cap).
 
 ### Keyboard shortcuts
 
-| Key | Action |
-|-----|--------|
-| Enter / Return | Re-evaluate the current value |
+| Shortcut | Action |
+|----------|--------|
+| Enter / Return | Re-evaluate and trigger conversion |
 | Up / Down | Increment / decrement the focused order or sweep control |
+| Ctrl+C | Copy the conversion result to clipboard as a full expression (`<value> <unit> = <result> <unit>`) |
+| Ctrl+V | Paste a numeric value into the focused entry field and trigger conversion; non-numeric input is silently ignored |
+| Ctrl+F | Open the Find Unit search dialog |
 | Ctrl+Q | Quit the application |
 
-### Context menu
+### Context menu (right-click)
 
 Right-click anywhere in the main window to open a context menu with the following options:
 
 1. **Settings...** — Opens the Settings dialog for theme selection and per-widget color picker.
-2. **History / Favorites...** — Opens the conversion history panel to view and manage conversions (see below).
-3. **Add Custom Unit...** — Opens the custom unit dialog to define and persist user-defined units.
-4. **About...** — Displays application information (author, version, license).
-5. **Exit** — Closes the application (equivalent to Ctrl+Q).
+2. **Copy result** (Ctrl+C) — Copies the conversion result to clipboard as a full expression.
+3. **Find Unit...** (Ctrl+F) — Opens a search dialog to find units/magnitudes by substring (case- and accent-insensitive).
+4. **Batch convert...** — Opens the batch-conversion dialog for multi-value or one-to-all-units conversions with CSV export.
+5. **History / Favorites...** — Opens the conversion history panel to view and manage conversions (see below).
+6. **Add Custom Unit...** — Opens the custom unit dialog to define and persist user-defined units.
+7. **About...** — Displays application information (author, version, license).
+8. **Exit** — Closes the application (equivalent to Ctrl+Q).
 
 ### History dialog and Favorites toggle
 
@@ -228,6 +243,54 @@ For each color role, you can:
 #### Persistence
 
 Theme selection (Light/Dark) and all color overrides are persisted to `~/.unit-converter/gui_theme.json` and are automatically restored when you launch the application again.
+
+### Find Unit search (Ctrl+F)
+
+Access via **Find Unit...** in the right-click context menu or press **Ctrl+F** to open the search dialog.
+
+1. **Type in the search field** — enter a unit name or magnitude name as a substring (e.g., `meter`, `kilo`, `temperature`, `angstrom`).
+2. **Matching is case- and accent-insensitive** — so `metre`, `Metre`, `METRE`, and `mètre` all match equally.
+3. **Results display** — matching units and magnitudes appear in a list, ordered by relevance (exact match, prefix, then substring).
+4. **Select and apply** — click a result or press Enter to populate the magnitude and From-unit selectors with the selected unit. The To-unit defaults to the same unit.
+
+This is useful for quickly locating a unit when you know its name but not its magnitude category.
+
+### Batch conversion (Batch convert...)
+
+Access via **Batch convert...** in the right-click context menu. (Requires a magnitude to be selected first.)
+
+The batch-conversion dialog offers two modes:
+
+#### Mode 1: Values list
+
+Convert N numeric values from one unit to another, all in one go.
+
+1. **Select mode:** Choose "Values list" from the Mode drop-down.
+2. **Input:** Paste or type numeric values (one per line) in the text area, e.g.:
+   ```
+   1
+   2.5
+   1000
+   ```
+3. **Units:** Select source (From unit) and target (To unit) from the combo boxes. The dialog pre-fills these from the main window's current selection.
+4. **Run batch:** Click "Run batch" to execute all conversions.
+5. **Results table:** Successful conversions appear in the Output column; any errors (malformed input, out-of-range values) display in the Error column.
+6. **Export:** Copy the table to clipboard (CSV format) or save to a file.
+
+#### Mode 2: All units
+
+Convert one value to every unit of the selected magnitude in one go.
+
+1. **Select mode:** Choose "All units" from the Mode drop-down.
+2. **Input:** Enter a single numeric value in the "Value:" field.
+3. **Units:** Select the source (From unit). The dialog will convert your value to all units in the same magnitude.
+4. **Run batch:** Click "Run batch" to execute.
+5. **Results table:** Shows one row per target unit, with the converted value or error message.
+6. **Export:** Copy or save as CSV.
+
+**Export options:**
+- **Copy table** — Copies the results to the system clipboard as CSV (tab-separated values, ready to paste into spreadsheets).
+- **Save CSV...** — Opens a file-save dialog to write results to a `.csv` file.
 
 ### Input clamping
 
