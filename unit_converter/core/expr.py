@@ -200,20 +200,34 @@ def _lookup_unit(
     Returns ``(factor, magnitude)``.
     Raises ``UnknownUnitError`` if not found.
     """
-    combined = dict(_BUILTIN_UNIT_TABLE)
-    if db:
-        combined.update(db)
-    if name in combined:
-        return combined[name]
+    # Fast path: no custom db — avoid copying the built-in table entirely.
+    if not db:
+        if name in _BUILTIN_UNIT_TABLE:
+            return _BUILTIN_UNIT_TABLE[name]
+        raise UnknownUnitError(
+            "Unknown unit {!r} in compound expression.  "
+            "Available: {}".format(name, sorted(_BUILTIN_UNIT_TABLE.keys()))
+        )
+    # Custom db present: check it first (takes precedence), then fall back.
+    if name in db:
+        return db[name]
+    if name in _BUILTIN_UNIT_TABLE:
+        return _BUILTIN_UNIT_TABLE[name]
+    combined_keys = sorted(set(_BUILTIN_UNIT_TABLE.keys()) | set(db.keys()))
     raise UnknownUnitError(
         "Unknown unit {!r} in compound expression.  "
-        "Available: {}".format(name, sorted(combined.keys()))
+        "Available: {}".format(name, combined_keys)
     )
 
 
 def _dim_vector(magnitude: str) -> dict:
-    """Return the base dimension vector for *magnitude*."""
-    return dict(_MAGNITUDE_DIMENSIONS.get(magnitude, {magnitude: 1}))
+    """Return the base dimension vector for *magnitude*.
+
+    Returns the canonical dict directly when the magnitude is known (callers
+    only iterate it — they never mutate the returned value).  For unknown
+    magnitudes, the inline default ``{magnitude: 1}`` is already a fresh dict.
+    """
+    return _MAGNITUDE_DIMENSIONS.get(magnitude, {magnitude: 1})
 
 
 def _merge_dims(base: dict, other: dict, sign: int) -> dict:

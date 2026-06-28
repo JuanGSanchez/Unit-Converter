@@ -116,6 +116,19 @@ class TestParseCompound:
         assert r.factor == pytest.approx(42.0)
         assert r.dimensions == {"Length": 1}
 
+    def test_custom_db_present_falls_back_to_builtin(self):
+        # Custom db is present but does not contain "m"; must fall back to built-in.
+        custom_db = {"myunit": (42.0, "Length")}
+        r = parse_compound("m", db=custom_db)
+        assert r.factor == pytest.approx(1.0)
+        assert r.dimensions == {"Length": 1}
+
+    def test_custom_db_present_unknown_in_both_raises(self):
+        # Custom db is present; name is in neither custom nor built-in table.
+        custom_db = {"myunit": (42.0, "Length")}
+        with pytest.raises(UnknownUnitError, match="foobar"):
+            parse_compound("foobar", db=custom_db)
+
 
 # ---------------------------------------------------------------------------
 # convert_compound

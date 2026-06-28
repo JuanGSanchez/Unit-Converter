@@ -4,7 +4,7 @@ unit_converter.gui.main_window
 PySide6 main window for the U Converter application.
 
 Features:
-- Fixed 235 x 385 px window, centered on screen, non-resizable.
+- Fixed 260 x 421 px window (golden-ratio portrait, φ ≈ 1.618), centered on screen, non-resizable.
 - Custom window icon from ``Logo UC.png``.
 - Magnitude selector (QComboBox), two unit selectors with SI/IEC order
   controls (scrollable QLabel), numeric entry (QLineEdit), and a
@@ -16,12 +16,19 @@ Features:
   position used by the Up/Down arrow increment; click resets to "...".
 - Arrow-key (Up/Down) and mouse-wheel nudge of the numeric entry value.
 - Hover tooltips (QToolTip) for every widget that carries user-visible info.
-  Tooltips use rich-text <p> wrapping so multi-line text is never clipped.
+  All tooltips are set via :func:`info_registry.register_info` — no inline
+  literals.  One ``QToolTip { ... }`` QSS block in ``theme.py`` styles them.
 - Right-click context menu: Settings, History/Favorites, Add Custom Unit,
   About, and Exit.
 - Ctrl+Q exits the application.
+- Ctrl+C copies the conversion result to the clipboard (when no text is selected
+  in an entry field); falls back to the default QLineEdit copy otherwise.
+- Ctrl+V pastes a numeric value from the clipboard into the focused entry field,
+  then triggers conversion; garbage text is silently rejected.
 - Return/Enter triggers conversion.
 - All conversion math delegated to ``unit_converter.core.converter``.
+- Clipboard integration (SPEC-15): Ctrl+C copies the result expression; Ctrl+V
+  pastes a numeric value into the focused entry and triggers conversion.
 - Conversion history panel (UC-I07): recent conversions persist across sessions.
 - Custom-unit dialog: add user-defined units persisted to ~/.unit-converter/custom.toml.
 - Light/Dark theming: all colors driven from ``gui.theme``; user picks and
@@ -30,8 +37,8 @@ Features:
 Implementation notes
 --------------------
 - The window is NOT frameless; the OS title-bar is preserved as expected.
-- Hover tooltips use Qt native QToolTip (``setToolTip``) with rich-text
-  ``<p>`` markup so Qt wraps text correctly and never clips multi-line tips.
+- Hover tooltips use Qt native QToolTip via :func:`info_registry.register_info`,
+  which sets tooltip + accessible description + WhatsThis from one registry.
 - Ctrl+Q is the quit shortcut (universally expected in Qt apps).
 - No ``del locals()`` / ``gc.collect()`` / ``del self`` cargo-cult exit — uses
   standard Qt ``QApplication.quit()``.
@@ -61,6 +68,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -72,6 +80,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -81,11 +92,20 @@ from unit_converter.core.data_loader import MagnitudeDataError, add_custom_unit
 from unit_converter.core.history import (
     HistoryEntry,
     add_favorite,
+    delete_entry as _delete_entry,
     list_favorites,
     load_history,
     record as _record_history,
+    remove_favorite,
 )
+from unit_converter.gui.history_menu import context_menu_actions as _ctx_actions
 from unit_converter.gui import theme as _theme
+from unit_converter.gui.clipboard import (
+    build_copy_expression as _build_copy_expression,
+    parse_pasted_number as _parse_pasted_number,
+)
+from unit_converter.gui.format_result import format_result as _format_result
+from unit_converter.gui.info_registry import register_info as _register_info
 from unit_converter.gui.theme_persist import (
     is_valid_hex_color,
     load_theme_prefs,
@@ -93,7 +113,30 @@ from unit_converter.gui.theme_persist import (
     normalize_hex_color,
     save_theme_prefs,
 )
+from unit_converter.gui.geometry import (
+    MARGIN_H,
+    MARGIN_V,
+    MARGIN_HEADER_TOP,
+    SPACING_FORM_H,
+    SPACING_FORM_V,
+    SPACING_MAIN,
+    SPACING_ROW,
+    center_dialog_on_parent,
+    dialog_default_size,
+    golden_ratio_size,
+)
 from unit_converter.gui.resources import logo_path
+from unit_converter.gui.unit_search import (
+    SearchHit,
+    build_search_index,
+    search as _search_units,
+)
+from unit_converter.gui.batch import (
+    BatchRow as _BatchRow,
+    batch_convert_values as _batch_convert_values,
+    batch_convert_to_all_units as _batch_convert_to_all_units,
+    rows_to_csv as _rows_to_csv,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -107,35 +150,9 @@ __datver__ = "06-2026"
 __pyver__ = "3.11"
 __license__ = "GPLv3"
 
-# Window geometry — matches original exactly
-_WINDOW_WIDTH = 235
-_WINDOW_HEIGHT = 385
-
-
-# ---------------------------------------------------------------------------
-# Tooltip helper — ensures full text is visible (TASK 3)
-# ---------------------------------------------------------------------------
-
-def _tip(text: str) -> str:
-    """
-    Wrap a tooltip string in rich-text markup so Qt renders it at a
-    comfortable width and never clips multi-line content.
-
-    Qt switches to rich-text mode when the string starts with ``<``, which
-    also enables its built-in word-wrap for QToolTip.  The ``white-space:
-    pre`` style preserves intentional newlines from the caller while still
-    allowing the tooltip popup to grow as needed.
-    """
-    # Escape any bare ampersands / angle brackets in the raw text so HTML
-    # does not misinterpret them; then re-insert intentional newlines as <br>.
-    safe = (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\n", "<br>")
-    )
-    return f"<p style='white-space:pre;margin:4px'>{safe}</p>"
+# Window geometry — golden ratio (φ ≈ 1.618) portrait, slightly larger than
+# the original 235×385.  Width chosen first; height = round(width * PHI).
+_WINDOW_WIDTH, _WINDOW_HEIGHT = golden_ratio_size(260)
 
 
 # ---------------------------------------------------------------------------
@@ -156,17 +173,11 @@ class _OrderLabel(QLabel):
         self._keys: list[str] = ["1"]  # prefix symbol sequence
         self._vals: list[int] = [0]    # exponent sequence
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(_tip(
-            "Scroll to change order of magnitude.\nClick to reset."
-        ))
-        # Default styling (will be overridden by apply_colors_to_main_window)
-        self._apply_default_style()
+        _register_info(self, "order_label")
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_order_label_stylesheet(colors))
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -216,16 +227,11 @@ class _SweepLabel(QLabel):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("...", parent)
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(_tip(
-            "Scroll to change digit position sweep.\nClick to reset."
-        ))
-        self._apply_default_style()
+        _register_info(self, "sweep_label")
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
         self.setCursor(Qt.PointingHandCursor)
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_sweep_label_stylesheet(colors))
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -289,15 +295,10 @@ class _NumEntry(QLineEdit):
         validator.setNotation(QDoubleValidator.StandardNotation)
         self.setValidator(validator)
         self.setAlignment(Qt.AlignLeft)
-        self._apply_default_style()
+        # Stylesheet is applied by the caller via restyle(colors) immediately
+        # after construction; no need for a redundant default-theme pass here.
         self.setEnabled(False)
-        self.setToolTip(_tip(
-            "Write or press Enter\nto run the conversion."
-        ))
-
-    def _apply_default_style(self) -> None:
-        colors = _theme.LIGHT_THEME.colors
-        self.setStyleSheet(_theme.build_entry_stylesheet(colors))
+        _register_info(self, "num_entry")
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -351,10 +352,24 @@ class _NumEntry(QLineEdit):
 
 class _HistoryDialog(QDialog):
     """
-    Non-modal dialog listing recent conversions and favorites.
+    Non-modal dialog listing recent conversions and favorites (UC-I07).
 
     Selecting an entry and clicking "Re-run" emits it back to the main window
-    via the ``rerun_entry`` signal (the parent connects to ``_apply_history``).
+    via ``accept()``; the parent reads ``selected_entry()`` after exec().
+
+    Features
+    --------
+    - Full-history view (default) shows all entries via ``load_history()``;
+      starred entries are prefixed with ``"* "``.
+    - Favorites-only view shows only favorited entries via ``list_favorites()``.
+    - "Show Favorites" / "Show All" toggle button switches between views; its
+      label reflects the current mode.
+    - Right-click context menu on the list provides: Re-run, Add to Favorites,
+      Remove from Favorites, Delete.  Which actions are active is determined by
+      :func:`unit_converter.gui.history_menu.context_menu_actions` (Qt-free
+      helper) based on the current view mode and the selected entry's state.
+    - After any mutating action (add/remove favorite, delete) the list is
+      refreshed in-place, respecting the current view mode.
     """
 
     def __init__(
@@ -364,8 +379,9 @@ class _HistoryDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Conversion History")
-        self.resize(420, 340)
-        self.setToolTip(_tip("Recent conversions and saved favorites."))
+        _w, _h = dialog_default_size("history")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "hist_dialog")
 
         # Apply dialog theme using the live override-aware color mapping.
         # Falls back to the built-in Light palette if no colors are supplied.
@@ -373,31 +389,55 @@ class _HistoryDialog(QDialog):
         self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
         self._selected_entry: HistoryEntry | None = None
 
+        # Track whether we are in favorites-only view
+        self._favorites_mode: bool = False
+
         layout = QVBoxLayout(self)
 
         self._list = QListWidget()
-        self._list.setToolTip(_tip("Recent conversions — double-click to re-run."))
+        _register_info(self._list, "hist_list")
+        # Enable the custom context menu signal
+        self._list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._list)
 
         buttons = QDialogButtonBox()
         self._btn_rerun = buttons.addButton("Re-run", QDialogButtonBox.ActionRole)
         self._btn_fav = buttons.addButton("Favorite", QDialogButtonBox.ActionRole)
+        self._btn_toggle = buttons.addButton(
+            "Show Favorites", QDialogButtonBox.ActionRole
+        )
         buttons.addButton(QDialogButtonBox.Close)
         layout.addWidget(buttons)
 
-        self._btn_rerun.setToolTip(_tip("Re-populate the converter with this entry."))
-        self._btn_fav.setToolTip(_tip("Mark this entry as a favorite."))
+        _register_info(self._btn_rerun, "hist_btn_rerun")
+        _register_info(self._btn_fav, "hist_btn_fav")
+        # Initial toggle button tooltip — full→fav direction (not yet in fav mode)
+        _register_info(self._btn_toggle, "hist_toggle_to_fav")
 
         self._btn_rerun.clicked.connect(self._on_rerun)
         self._btn_fav.clicked.connect(self._on_favorite)
+        self._btn_toggle.clicked.connect(self._on_toggle_view)
         buttons.rejected.connect(self.close)
 
         self._entries: list[HistoryEntry] = []
         self._refresh()
 
+    # ------------------------------------------------------------------
+    # List refresh
+    # ------------------------------------------------------------------
+
     def _refresh(self) -> None:
+        """Reload and redisplay entries for the current view mode."""
         self._list.clear()
-        self._entries = load_history()
+        try:
+            if self._favorites_mode:
+                self._entries = list_favorites()
+            else:
+                self._entries = load_history()
+        except Exception:
+            logger.exception("Failed to load history for dialog refresh")
+            self._entries = []
         for e in self._entries:
             star = "* " if e.favorite else ""
             label = (
@@ -406,17 +446,133 @@ class _HistoryDialog(QDialog):
             )
             self._list.addItem(QListWidgetItem(label))
 
+    # ------------------------------------------------------------------
+    # Button handlers
+    # ------------------------------------------------------------------
+
     def _on_rerun(self) -> None:
+        """Re-run button: accept dialog and surface the selected entry."""
         idx = self._list.currentRow()
         if 0 <= idx < len(self._entries):
             self._selected_entry = self._entries[idx]
             self.accept()
 
     def _on_favorite(self) -> None:
+        """Favorite button: add the selected entry as a favorite."""
         idx = self._list.currentRow()
         if 0 <= idx < len(self._entries):
-            add_favorite(self._entries[idx], label="")
+            entry = self._entries[idx]
+            try:
+                add_favorite(entry, label="")
+            except Exception:
+                logger.exception(
+                    "Failed to add favorite for entry timestamp=%r", entry.timestamp
+                )
+                return
             self._refresh()
+
+    def _on_toggle_view(self) -> None:
+        """Toggle between full-history and favorites-only view.
+
+        Uses registry keys ``hist_toggle_to_full`` and ``hist_toggle_to_fav``
+        so the dynamic tooltip change is tested via :func:`register_info`
+        (SPEC-01 state-dependent tooltip requirement).
+        """
+        self._favorites_mode = not self._favorites_mode
+        if self._favorites_mode:
+            self._btn_toggle.setText("Show All")
+            _register_info(self._btn_toggle, "hist_toggle_to_full")
+        else:
+            self._btn_toggle.setText("Show Favorites")
+            _register_info(self._btn_toggle, "hist_toggle_to_fav")
+        self._refresh()
+
+    # ------------------------------------------------------------------
+    # Right-click context menu
+    # ------------------------------------------------------------------
+
+    def _on_context_menu(self, pos) -> None:
+        """Build and show a context menu for the list item under *pos*."""
+        idx = self._list.currentRow()
+        if not (0 <= idx < len(self._entries)):
+            return
+
+        entry = self._entries[idx]
+        actions_enabled = _ctx_actions(
+            is_favorites_view=self._favorites_mode,
+            entry_is_favorite=entry.favorite,
+        )
+
+        menu = QMenu(self)
+
+        act_rerun = menu.addAction("Re-run")
+        act_rerun.setEnabled(actions_enabled.get("run_again", False))
+
+        menu.addSeparator()
+
+        act_add_fav = menu.addAction("Add to Favorites")
+        act_add_fav.setEnabled(actions_enabled.get("add_favorite", False))
+        act_add_fav.setVisible(actions_enabled.get("add_favorite", False))
+
+        act_rem_fav = menu.addAction("Remove from Favorites")
+        act_rem_fav.setEnabled(actions_enabled.get("remove_favorite", False))
+        act_rem_fav.setVisible(actions_enabled.get("remove_favorite", False))
+
+        menu.addSeparator()
+
+        act_delete = menu.addAction("Delete")
+        act_delete.setEnabled(actions_enabled.get("delete", False))
+
+        chosen = menu.exec(self._list.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+
+        if chosen is act_rerun:
+            self._selected_entry = entry
+            self.accept()
+        elif chosen is act_add_fav:
+            self._ctx_add_favorite(entry)
+        elif chosen is act_rem_fav:
+            self._ctx_remove_favorite(entry)
+        elif chosen is act_delete:
+            self._ctx_delete(entry)
+
+    def _ctx_add_favorite(self, entry: HistoryEntry) -> None:
+        """Context menu — Add to Favorites."""
+        try:
+            add_favorite(entry, label="")
+        except Exception:
+            logger.exception(
+                "Context menu: failed to add favorite, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    def _ctx_remove_favorite(self, entry: HistoryEntry) -> None:
+        """Context menu — Remove from Favorites."""
+        try:
+            remove_favorite(entry)
+        except Exception:
+            logger.exception(
+                "Context menu: failed to remove favorite, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    def _ctx_delete(self, entry: HistoryEntry) -> None:
+        """Context menu — Delete entry."""
+        try:
+            _delete_entry(entry)
+        except Exception:
+            logger.exception(
+                "Context menu: failed to delete entry, timestamp=%r", entry.timestamp
+            )
+            return
+        self._refresh()
+
+    # ------------------------------------------------------------------
+    # Public result accessor
+    # ------------------------------------------------------------------
 
     def selected_entry(self) -> HistoryEntry | None:
         return self._selected_entry
@@ -437,8 +593,9 @@ class _AddUnitDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Add Custom Unit")
-        self.resize(300, 180)
-        self.setToolTip(_tip("Add a custom unit to an existing magnitude."))
+        _w, _h = dialog_default_size("add_unit")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "add_unit_dialog")
 
         # Apply dialog theme using the live override-aware color mapping.
         # Falls back to the built-in Light palette if no colors are supplied.
@@ -450,20 +607,17 @@ class _AddUnitDialog(QDialog):
 
         self._cb_magnitude = QComboBox()
         self._cb_magnitude.addItems(magnitude_names)
-        self._cb_magnitude.setToolTip(_tip("The magnitude to extend."))
+        _register_info(self._cb_magnitude, "add_unit_magnitude_combo")
         form.addRow("Magnitude:", self._cb_magnitude)
 
         self._ed_name = QLineEdit()
         self._ed_name.setPlaceholderText("e.g. stone (st)")
-        self._ed_name.setToolTip(_tip("Name for the new unit."))
+        _register_info(self._ed_name, "add_unit_name_edit")
         form.addRow("Unit name:", self._ed_name)
 
         self._ed_factor = QLineEdit()
         self._ed_factor.setPlaceholderText("e.g. 6350.29")
-        self._ed_factor.setToolTip(_tip(
-            "Conversion factor relative to the magnitude's base unit.\n"
-            "Must be a positive, non-zero finite number."
-        ))
+        _register_info(self._ed_factor, "add_unit_factor_edit")
         form.addRow("Factor:", self._ed_factor)
 
         layout.addLayout(form)
@@ -536,8 +690,9 @@ class _SettingsDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings — Theme & Colors")
-        self.resize(430, 480)
-        self.setToolTip(_tip("Configure the application theme and widget colours."))
+        _w, _h = dialog_default_size("settings")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "settings_dialog")
 
         # Working copy of colours that the user is editing
         self._working: dict[str, str] = dict(current_colors)
@@ -554,13 +709,10 @@ class _SettingsDialog(QDialog):
         idx = self._cb_theme.findText(current_theme_name)
         if idx >= 0:
             self._cb_theme.setCurrentIndex(idx)
-        self._cb_theme.setToolTip(_tip(
-            "Select a built-in theme.\n"
-            "Colours below will be reset to the theme's defaults."
-        ))
+        _register_info(self._cb_theme, "settings_theme_combo")
         theme_row.addWidget(self._cb_theme, stretch=1)
         load_btn = QPushButton("Load theme")
-        load_btn.setToolTip(_tip("Reset all colours to the selected built-in theme."))
+        _register_info(load_btn, "settings_load_btn")
         load_btn.clicked.connect(self._on_load_theme)
         theme_row.addWidget(load_btn)
         layout.addWidget(theme_group)
@@ -569,8 +721,8 @@ class _SettingsDialog(QDialog):
         color_group = QGroupBox("Widget colours  (hex #RRGGBB or click swatch)")
         scroll_content = QWidget()
         form = QFormLayout(scroll_content)
-        form.setHorizontalSpacing(8)
-        form.setVerticalSpacing(6)
+        form.setHorizontalSpacing(SPACING_FORM_H)
+        form.setVerticalSpacing(SPACING_FORM_V)
 
         self._swatch_btns: dict[str, QPushButton] = {}
         self._hex_edits: dict[str, QLineEdit] = {}
@@ -583,7 +735,7 @@ class _SettingsDialog(QDialog):
 
             swatch = QPushButton()
             swatch.setFixedSize(28, 22)
-            swatch.setToolTip(_tip(f"Click to open colour picker for:\n{label}"))
+            _register_info(swatch, "settings_swatch_btn", extra=f"\n{label}")
             self._update_swatch(swatch, self._working.get(key, "#808080"))
             swatch.clicked.connect(lambda checked=False, k=key: self._on_pick_color(k))
             self._swatch_btns[key] = swatch
@@ -593,9 +745,7 @@ class _SettingsDialog(QDialog):
             hex_ed.setFixedWidth(80)
             hex_ed.setMaxLength(7)
             hex_ed.setPlaceholderText("#RRGGBB")
-            hex_ed.setToolTip(_tip(
-                f"Type a hex colour for:\n{label}\nFormat: #RRGGBB"
-            ))
+            _register_info(hex_ed, "settings_hex_edit", extra=f"{label}")
             hex_ed.textEdited.connect(lambda text, k=key: self._on_hex_edited(k, text))
             self._hex_edits[key] = hex_ed
             row_layout.addWidget(hex_ed)
@@ -610,7 +760,7 @@ class _SettingsDialog(QDialog):
         # -- Buttons ----------------------------------------------------------
         button_row = QHBoxLayout()
         apply_btn = QPushButton("Apply")
-        apply_btn.setToolTip(_tip("Apply the current colours to the window immediately."))
+        _register_info(apply_btn, "settings_apply_btn")
         apply_btn.clicked.connect(self._on_apply)
         button_row.addWidget(apply_btn)
 
@@ -698,6 +848,464 @@ class _SettingsDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Unit-search dialog (SPEC-14)
+# ---------------------------------------------------------------------------
+
+class _SearchDialog(QDialog):
+    """
+    Small search dialog for finding units across all magnitudes (SPEC-14).
+
+    Opened from the right-click context menu ("Find Unit...").  The search
+    index is passed in at construction time (the MainWindow builds it once and
+    caches it on ``self._search_index``).
+
+    Flow
+    ----
+    1. User types in the search field; the results list updates on every
+       keystroke via ``_on_query_changed``.
+    2. User selects a row and clicks "Apply" (or presses Enter / double-clicks)
+       to accept the dialog.
+    3. The caller reads :meth:`selected_hit` and applies it to the converter.
+
+    Tooltip invariant
+    -----------------
+    Every interactive widget registers its tooltip via ``_register_info``.
+    No inline setToolTip literals — all text comes from the registry.
+    """
+
+    def __init__(
+        self,
+        index: list[SearchHit],
+        parent: "QWidget | None" = None,
+        colors: "dict[str, str] | None" = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Find Unit")
+        _w, _h = dialog_default_size("search")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "search_dialog")
+
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
+
+        self._index = index
+        self._selected_hit: SearchHit | None = None
+
+        layout = QVBoxLayout(self)
+
+        # Search field
+        self._search_edit = QLineEdit()
+        self._search_edit.setPlaceholderText("Type to search units and magnitudes…")
+        _register_info(self._search_edit, "search_edit")
+        layout.addWidget(self._search_edit)
+
+        # Results list
+        self._results_list = QListWidget()
+        _register_info(self._results_list, "search_results_list")
+        layout.addWidget(self._results_list, stretch=1)
+
+        # Buttons
+        buttons = QDialogButtonBox()
+        self._apply_btn = buttons.addButton("Apply", QDialogButtonBox.AcceptRole)
+        _register_info(self._apply_btn, "search_apply_btn")
+        buttons.addButton(QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_apply)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        # Connections
+        self._search_edit.textChanged.connect(self._on_query_changed)
+        self._results_list.itemDoubleClicked.connect(self._on_apply)
+        # Enter key in the search field moves focus to list for keyboard
+        # navigation (user can then press Enter again via button default).
+        self._search_edit.returnPressed.connect(self._on_apply)
+
+        self._search_edit.setFocus()
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    def _on_query_changed(self, text: str) -> None:
+        """Re-run the search on every keystroke and repopulate the list."""
+        self._results_list.clear()
+        hits = _search_units(self._index, text, limit=50)
+        for hit in hits:
+            item = QListWidgetItem(f"{hit.magnitude}  —  {hit.unit}")
+            item.setData(Qt.UserRole, hit)
+            self._results_list.addItem(item)
+        # Auto-select the first result so Enter immediately applies it.
+        if self._results_list.count() > 0:
+            self._results_list.setCurrentRow(0)
+
+    def _on_apply(self) -> None:
+        """Accept the dialog if a result row is selected."""
+        current = self._results_list.currentItem()
+        if current is None:
+            return
+        hit = current.data(Qt.UserRole)
+        if isinstance(hit, SearchHit):
+            self._selected_hit = hit
+            self.accept()
+
+    # ------------------------------------------------------------------
+    # Public result accessor
+    # ------------------------------------------------------------------
+
+    def selected_hit(self) -> "SearchHit | None":
+        """Return the hit chosen by the user, or ``None`` if cancelled."""
+        return self._selected_hit
+
+
+# ---------------------------------------------------------------------------
+# Batch-conversion dialog (SPEC-12)
+# ---------------------------------------------------------------------------
+
+class _BatchDialog(QDialog):
+    """
+    Batch-conversion dialog (SPEC-12).
+
+    Two modes are available via a drop-down selector:
+
+    - **Values list** — paste or type N values (one per line) and convert
+      them between two chosen units.  The dialog pre-fills the magnitude and
+      units from the main window's current selection.
+    - **All units** — convert one value to every unit of the selected
+      magnitude.
+
+    Results are shown in a ``QTableWidget``.  Per-row errors appear inline
+    in the table (never via a popup window — SPEC-19 consistency).
+
+    Export
+    ------
+    - *Copy table* — serialises the table to CSV and places it on the system
+      clipboard via ``QApplication.clipboard()``.
+    - *Save CSV…* — opens ``QFileDialog.getSaveFileName`` and writes the CSV
+      to the chosen path.
+
+    Tooltip invariant
+    -----------------
+    Every interactive widget uses ``_register_info``; no inline tooltip
+    literals.  All text comes from the info registry (SPEC-01).
+    """
+
+    # Mode constants
+    _MODE_VALUES = "Values list"
+    _MODE_ALL_UNITS = "All units"
+
+    def __init__(
+        self,
+        magnitude: str,
+        from_unit: str,
+        to_unit: str,
+        all_units: list[str],
+        sweep_text: str = "...",
+        parent: "QWidget | None" = None,
+        colors: "dict[str, str] | None" = None,
+    ) -> None:
+        """
+        Parameters
+        ----------
+        magnitude:
+            Current magnitude name (pre-fills the dialog; user can change
+            the units but not the magnitude in this dialog for simplicity).
+        from_unit:
+            Current from-unit (pre-selected in the from-unit combo).
+        to_unit:
+            Current to-unit (pre-selected in the to-unit combo).
+        all_units:
+            All unit names for *magnitude* (populates both unit combos).
+        sweep_text:
+            The live sweep-label text from the main window; passed to
+            ``batch_convert_values`` / ``batch_convert_to_all_units`` so
+            that displayed values match the main window's precision setting.
+        parent:
+            Optional parent widget.
+        colors:
+            Theme colour mapping from the main window.  Falls back to the
+            built-in Light palette.
+        """
+        super().__init__(parent)
+        self.setWindowTitle(f"Batch Convert — {magnitude}")
+        _w, _h = dialog_default_size("batch")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "batch_dialog")
+
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
+
+        self._magnitude = magnitude
+        self._all_units = all_units
+        self._sweep_text = sweep_text
+        self._rows: list[_BatchRow] = []
+        self._colors = _colors
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(SPACING_MAIN)
+
+        # ---- Mode selector --------------------------------------------------
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:"))
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItems([self._MODE_VALUES, self._MODE_ALL_UNITS])
+        _register_info(self._mode_combo, "batch_mode_combo")
+        mode_row.addWidget(self._mode_combo, stretch=1)
+        layout.addLayout(mode_row)
+
+        # ---- From-unit selector (shared by both modes) ----------------------
+        unit_row = QHBoxLayout()
+        unit_row.addWidget(QLabel("From unit:"))
+        self._from_unit_combo = QComboBox()
+        self._from_unit_combo.addItems(all_units)
+        idx = self._from_unit_combo.findText(from_unit)
+        if idx >= 0:
+            self._from_unit_combo.setCurrentIndex(idx)
+        _register_info(self._from_unit_combo, "batch_from_unit_combo")
+        unit_row.addWidget(self._from_unit_combo, stretch=1)
+        layout.addLayout(unit_row)
+
+        # ---- To-unit selector (values-list mode only) -----------------------
+        to_row = QHBoxLayout()
+        self._to_unit_label = QLabel("To unit:")
+        to_row.addWidget(self._to_unit_label)
+        self._to_unit_combo = QComboBox()
+        self._to_unit_combo.addItems(all_units)
+        idx2 = self._to_unit_combo.findText(to_unit)
+        if idx2 >= 0:
+            self._to_unit_combo.setCurrentIndex(idx2)
+        _register_info(self._to_unit_combo, "batch_to_unit_combo")
+        to_row.addWidget(self._to_unit_combo, stretch=1)
+        layout.addLayout(to_row)
+
+        # ---- Value input area (mode-dependent) ------------------------------
+        # Values-list mode: multi-line text area
+        self._values_edit = QTextEdit()
+        self._values_edit.setPlaceholderText(
+            "Enter one numeric value per line, e.g.:\n1\n2.5\n1000"
+        )
+        self._values_edit.setFixedHeight(100)
+        _register_info(self._values_edit, "batch_values_edit")
+        layout.addWidget(self._values_edit)
+
+        # All-units mode: single value entry
+        single_row = QHBoxLayout()
+        self._single_value_label = QLabel("Value:")
+        single_row.addWidget(self._single_value_label)
+        self._single_value_edit = QLineEdit("1")
+        _register_info(self._single_value_edit, "batch_single_value_edit")
+        single_row.addWidget(self._single_value_edit, stretch=1)
+        layout.addLayout(single_row)
+
+        # ---- Run button -----------------------------------------------------
+        self._run_btn = QPushButton("Run batch")
+        _register_info(self._run_btn, "batch_run_btn")
+        layout.addWidget(self._run_btn)
+
+        # ---- Results table --------------------------------------------------
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["Input", "Output", "Error"])
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
+        _register_info(self._table, "batch_results_table")
+        layout.addWidget(self._table, stretch=1)
+
+        # ---- Inline status surface (SPEC-R2 / SPEC-19) ----------------------
+        # Non-blocking, themed feedback for save/copy success and failure.
+        # Replaces the former modal QMessageBox on the save path so the batch
+        # dialog reports errors the same non-blocking way the main window does.
+        self._status_label = QLabel("")
+        self._status_label.setWordWrap(True)
+        self._status_label.setVisible(False)
+        _register_info(self._status_label, "batch_status_label")
+        layout.addWidget(self._status_label)
+
+        # ---- Export buttons -------------------------------------------------
+        export_row = QHBoxLayout()
+        self._copy_btn = QPushButton("Copy table")
+        _register_info(self._copy_btn, "batch_copy_btn")
+        export_row.addWidget(self._copy_btn)
+
+        self._save_btn = QPushButton("Save CSV…")
+        _register_info(self._save_btn, "batch_save_btn")
+        export_row.addWidget(self._save_btn)
+
+        export_row.addStretch()
+        close_btn = QDialogButtonBox(QDialogButtonBox.Close)
+        close_btn.rejected.connect(self.reject)
+        export_row.addWidget(close_btn)
+        layout.addLayout(export_row)
+
+        # ---- Wire signals ---------------------------------------------------
+        self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        self._run_btn.clicked.connect(self._on_run)
+        self._copy_btn.clicked.connect(self._on_copy)
+        self._save_btn.clicked.connect(self._on_save)
+
+        # Set initial mode visibility
+        self._on_mode_changed(self._mode_combo.currentText())
+
+    # ------------------------------------------------------------------
+    # Mode switching
+    # ------------------------------------------------------------------
+
+    def _on_mode_changed(self, mode: str) -> None:
+        """Show/hide mode-specific controls based on the selected mode."""
+        is_values = (mode == self._MODE_VALUES)
+        self._values_edit.setVisible(is_values)
+        self._to_unit_label.setVisible(is_values)
+        self._to_unit_combo.setVisible(is_values)
+        self._single_value_label.setVisible(not is_values)
+        self._single_value_edit.setVisible(not is_values)
+        # Reset the table when switching modes
+        self._table.setRowCount(0)
+        self._rows = []
+        self._clear_status()
+
+    # ------------------------------------------------------------------
+    # Run batch
+    # ------------------------------------------------------------------
+
+    def _on_run(self) -> None:
+        """Execute the batch conversion and populate the results table."""
+        self._clear_status()
+        mode = self._mode_combo.currentText()
+        from_unit = self._from_unit_combo.currentText()
+
+        if mode == self._MODE_VALUES:
+            self._run_values_mode(from_unit)
+        else:
+            self._run_all_units_mode(from_unit)
+
+    def _run_values_mode(self, from_unit: str) -> None:
+        """Run values-list batch: N input values → N results."""
+        to_unit = self._to_unit_combo.currentText()
+        raw_text = self._values_edit.toPlainText()
+        lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+        if not lines:
+            return
+
+        self._rows = _batch_convert_values(
+            _core.convert,
+            self._magnitude,
+            lines,
+            from_unit,
+            to_unit,
+            sweep_text=self._sweep_text,
+        )
+
+        # Populate table: columns = Input | Output | Error
+        self._table.setColumnCount(3)
+        self._table.setHorizontalHeaderLabels(["Input", "Output", "Error"])
+        self._table.setRowCount(len(self._rows))
+        for row_idx, row in enumerate(self._rows):
+            self._table.setItem(row_idx, 0, QTableWidgetItem(row.input_value))
+            self._table.setItem(row_idx, 1, QTableWidgetItem(row.output_text))
+            self._table.setItem(row_idx, 2, QTableWidgetItem(row.error or ""))
+        self._table.resizeColumnsToContents()
+
+    def _run_all_units_mode(self, from_unit: str) -> None:
+        """Run all-units batch: one value → one row per unit."""
+        raw = self._single_value_edit.text().strip()
+        try:
+            value = float(raw)
+        except ValueError:
+            logger.error(
+                "_BatchDialog: invalid single value %r for all-units mode", raw
+            )
+            self._table.setRowCount(0)
+            return
+
+        self._rows = _batch_convert_to_all_units(
+            _core.convert,
+            _core.list_units,
+            self._magnitude,
+            value,
+            from_unit,
+            sweep_text=self._sweep_text,
+        )
+
+        # Populate table: columns = Unit | Output | Error
+        self._table.setColumnCount(3)
+        self._table.setHorizontalHeaderLabels(["Unit", "Output", "Error"])
+        self._table.setRowCount(len(self._rows))
+        for row_idx, row in enumerate(self._rows):
+            self._table.setItem(row_idx, 0, QTableWidgetItem(row.unit or ""))
+            self._table.setItem(row_idx, 1, QTableWidgetItem(row.output_text))
+            self._table.setItem(row_idx, 2, QTableWidgetItem(row.error or ""))
+        self._table.resizeColumnsToContents()
+
+    # ------------------------------------------------------------------
+    # Export helpers
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Inline status surface (SPEC-R2 / SPEC-19)
+    # ------------------------------------------------------------------
+
+    def _set_status(self, text: str, *, is_error: bool = False) -> None:
+        """
+        Show a non-blocking, themed message in the inline status label.
+
+        Colour derives from the dialog's active theme (``fg_title`` accent);
+        errors are rendered bold.  No modal popup, no hard-coded colour.
+        """
+        accent = self._colors.get("fg_title", "#1E5AA8")
+        weight = "bold" if is_error else "normal"
+        self._status_label.setStyleSheet(
+            f"color: {accent}; font-weight: {weight};"
+        )
+        self._status_label.setText(text)
+        self._status_label.setVisible(bool(text))
+
+    def _clear_status(self) -> None:
+        """Hide and empty the inline status label."""
+        self._status_label.setText("")
+        self._status_label.setVisible(False)
+
+    def _current_headers(self) -> list[str]:
+        """Return the BatchRow field names matching the current table columns."""
+        mode = self._mode_combo.currentText()
+        if mode == self._MODE_VALUES:
+            return ["input_value", "output_text", "error"]
+        else:
+            return ["unit", "output_text", "error"]
+
+    def _on_copy(self) -> None:
+        """Serialise the results table to CSV and copy to the clipboard."""
+        if not self._rows:
+            return
+        csv_text = _rows_to_csv(self._rows, self._current_headers())
+        QApplication.clipboard().setText(csv_text)
+        logger.debug("_BatchDialog: copied %d rows to clipboard", len(self._rows))
+        self._set_status(f"Copied {len(self._rows)} rows to clipboard.")
+
+    def _on_save(self) -> None:
+        """Open a file-save dialog and write the results to a CSV file."""
+        if not self._rows:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save batch results",
+            f"batch_{self._magnitude}.csv",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not path:
+            return
+        csv_text = _rows_to_csv(self._rows, self._current_headers())
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(csv_text)
+            logger.info("_BatchDialog: saved %d rows to %r", len(self._rows), path)
+            self._set_status(f"Saved {len(self._rows)} rows to {path}")
+        except OSError as exc:
+            # SPEC-R2 / SPEC-19: report non-fatal write failures through the
+            # inline themed surface, not a modal popup window.
+            logger.error("_BatchDialog: failed to save CSV to %r: %s", path, exc)
+            self._set_status(f"Could not write file: {exc}", is_error=True)
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -705,7 +1313,7 @@ class MainWindow(QWidget):
     """
     PySide6 main window for U Converter.
 
-    Fixed 235 x 385 px, centered, non-resizable.  Wired entirely to the pure
+    Fixed 260 x 421 px (golden-ratio portrait), centered, non-resizable.  Wired entirely to the pure
     ``unit_converter.core.converter`` API — no conversion math is implemented
     here.  Integrates history (UC-I07) and custom units (UC-I03).
 
@@ -759,6 +1367,9 @@ class MainWindow(QWidget):
         self._val2: float = 0.0
         self._val1_old: float = 0.0
         self._val2_old: float = 0.0
+
+        # Lazily built once by _get_search_index (SPEC-14 / SPEC-21).
+        self._search_index: list[SearchHit] | None = None
 
         self._build_ui()
         self._connect_signals()
@@ -821,8 +1432,8 @@ class MainWindow(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 7, 10, 7)
-        layout.setSpacing(5)
+        layout.setContentsMargins(MARGIN_H, MARGIN_V, MARGIN_H, MARGIN_V)
+        layout.setSpacing(SPACING_MAIN)
 
         # ---- Magnitude label + combo ----
         self._lab_mag = QLabel("Magnitude")
@@ -840,9 +1451,7 @@ class MainWindow(QWidget):
         self._cb_magnitude.setStyleSheet(
             _theme.build_combo_stylesheet(self._active_colors)
         )
-        self._cb_magnitude.setToolTip(_tip(
-            "List of magnitudes added to the application."
-        ))
+        _register_info(self._cb_magnitude, "magnitude_combo")
         layout.addWidget(self._cb_magnitude)
 
         # ---- From section ----
@@ -871,7 +1480,7 @@ class MainWindow(QWidget):
         """Create a horizontal row with a direction label on the left and a
         scientific-notation value label on the right."""
         row = QHBoxLayout()
-        row.setContentsMargins(0, 5, 0, 0)
+        row.setContentsMargins(0, MARGIN_HEADER_TOP, 0, 0)
 
         lab = QLabel(label_text)
         lab.setStyleSheet(
@@ -893,7 +1502,7 @@ class MainWindow(QWidget):
             _theme.build_header_label_stylesheet(self._active_colors)
         )
         val_lab.setFixedWidth(90)
-        val_lab.setToolTip(_tip("Actual total value in scientific notation."))
+        _register_info(val_lab, "val_label")
 
         if label_text.startswith("From"):
             self._lab_val1 = val_lab
@@ -906,7 +1515,7 @@ class MainWindow(QWidget):
         """Create the order label + unit combobox row for a given slot (1=from, 2=to)."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setSpacing(SPACING_ROW)
 
         order_lab = _OrderLabel(
             on_change=lambda: self._unit_converter(1),
@@ -927,6 +1536,8 @@ class MainWindow(QWidget):
             self._order2 = order_lab
             self._cb_unit2 = unit_cb
 
+        _register_info(unit_cb, "unit_combo")
+
         row.addWidget(order_lab)
         row.addWidget(unit_cb, stretch=1)
         return row
@@ -935,7 +1546,7 @@ class MainWindow(QWidget):
         """Create the numeric entry + sweep label row for a given slot."""
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setSpacing(SPACING_ROW)
 
         sweep = _SweepLabel()
         sweep.restyle(self._active_colors)
@@ -954,6 +1565,9 @@ class MainWindow(QWidget):
             self._sweep2 = sweep
             self._entry2 = entry
 
+        # sweep_label tooltip is set in _SweepLabel.__init__ via register_info.
+        # No additional call needed here.
+
         row.addWidget(entry, stretch=1)
         row.addWidget(sweep)
         return row
@@ -968,6 +1582,22 @@ class MainWindow(QWidget):
         self._cb_unit2.currentTextChanged.connect(lambda _: self._unit_converter(1))
         self._entry1.textEdited.connect(lambda _: self._unit_converter(1))
         self._entry2.textEdited.connect(lambda _: self._unit_converter(2))
+        self._setup_tab_order()
+
+    def _setup_tab_order(self) -> None:
+        """
+        Set the logical tab order for the main conversion flow (SPEC-22).
+
+        Order: magnitude → unit1 → order1 → entry1 → entry2 → unit2 → order2.
+        This ensures keyboard-only users can navigate the conversion inputs in
+        a top-to-bottom, left-to-right sequence without extra Tab presses.
+        """
+        QWidget.setTabOrder(self._cb_magnitude, self._cb_unit1)
+        QWidget.setTabOrder(self._cb_unit1, self._order1)
+        QWidget.setTabOrder(self._order1, self._entry1)
+        QWidget.setTabOrder(self._entry1, self._entry2)
+        QWidget.setTabOrder(self._entry2, self._cb_unit2)
+        QWidget.setTabOrder(self._cb_unit2, self._order2)
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts
@@ -985,6 +1615,22 @@ class MainWindow(QWidget):
         sc_quit = QShortcut(QKeySequence("Ctrl+Q"), self)
         sc_quit.activated.connect(self._exit)
 
+        # Ctrl+C — copy result to clipboard (SPEC-15).
+        # Uses ShortcutContext.WindowShortcut so it fires at the window level, but
+        # _copy_result() guards against clobbering an active text selection inside
+        # an entry — if an entry has selected text the standard copy is allowed to
+        # proceed via the default QLineEdit handler (we simply do nothing here).
+        sc_copy = QShortcut(QKeySequence("Ctrl+C"), self)
+        sc_copy.activated.connect(self._copy_result)
+
+        # Ctrl+V — paste numeric value into the focused entry (SPEC-15).
+        sc_paste = QShortcut(QKeySequence("Ctrl+V"), self)
+        sc_paste.activated.connect(self._paste_value)
+
+        # Ctrl+F — open unit-search dialog (SPEC-14).
+        sc_find = QShortcut(QKeySequence("Ctrl+F"), self)
+        sc_find.activated.connect(self._show_search)
+
     # ------------------------------------------------------------------
     # Context menu (right-click)
     # ------------------------------------------------------------------
@@ -992,6 +1638,10 @@ class MainWindow(QWidget):
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
         settings_action = menu.addAction("Settings...")
+        menu.addSeparator()
+        copy_action = menu.addAction("Copy result\tCtrl+C")
+        search_action = menu.addAction("Find Unit...\tCtrl+F")
+        batch_action = menu.addAction("Batch convert...")
         menu.addSeparator()
         history_action = menu.addAction("History / Favorites...")
         add_unit_action = menu.addAction("Add Custom Unit...")
@@ -1001,6 +1651,12 @@ class MainWindow(QWidget):
         action = menu.exec(event.globalPos())
         if action == settings_action:
             self._show_settings()
+        elif action == copy_action:
+            self._copy_result()
+        elif action == search_action:
+            self._show_search()
+        elif action == batch_action:
+            self._show_batch()
         elif action == history_action:
             self._show_history()
         elif action == add_unit_action:
@@ -1009,6 +1665,100 @@ class MainWindow(QWidget):
             self._show_about()
         elif action == exit_action:
             self._exit()
+
+    def _get_search_index(self) -> list[SearchHit]:
+        """
+        Return the cached search index, building it on first call (SPEC-21).
+
+        The index is built exactly once from the core's discovery callables
+        (``list_magnitudes`` + ``list_units``) and cached on ``self._search_index``.
+        Subsequent calls return the cached list without rebuilding.
+        """
+        if self._search_index is None:
+            self._search_index = build_search_index(
+                _core.list_magnitudes,
+                _core.list_units,
+            )
+            logger.debug(
+                "Search index built: %d entries", len(self._search_index)
+            )
+        return self._search_index
+
+    def _show_search(self) -> None:
+        """
+        Open the unit-search dialog (SPEC-14).
+
+        On acceptance, applies the selected hit: sets the magnitude combo,
+        waits for ``_on_magnitude_changed`` to populate the unit combos, then
+        selects the matching unit in ``_cb_unit1``.
+        """
+        dlg = _SearchDialog(
+            index=self._get_search_index(),
+            parent=self,
+            colors=self._active_colors,
+        )
+        if dlg.exec() != QDialog.Accepted:
+            return
+        hit = dlg.selected_hit()
+        if hit is None:
+            return
+
+        # Set magnitude (triggers _on_magnitude_changed which populates unit combos)
+        mag_idx = self._cb_magnitude.findText(hit.magnitude)
+        if mag_idx < 0:
+            logger.warning(
+                "Search: magnitude %r not found in combo", hit.magnitude
+            )
+            return
+        self._cb_magnitude.setCurrentIndex(mag_idx)
+
+        # _on_magnitude_changed has now run; select the unit in cb_unit1
+        unit_idx = self._cb_unit1.findText(hit.unit)
+        if unit_idx >= 0:
+            self._cb_unit1.setCurrentIndex(unit_idx)
+        else:
+            logger.warning(
+                "Search: unit %r not found in combo after setting magnitude %r",
+                hit.unit,
+                hit.magnitude,
+            )
+
+    def _show_batch(self) -> None:
+        """
+        Open the batch-conversion dialog (SPEC-12).
+
+        Pre-fills magnitude and units from the main window's current
+        selection.  If no magnitude is selected, shows an information
+        message instead of opening an empty dialog.
+        """
+        magnitude = self._cb_magnitude.currentText()
+        if magnitude == "*Select magnitude*":
+            QMessageBox.information(
+                self,
+                "Batch convert",
+                "Please select a magnitude first.",
+            )
+            return
+
+        mag_idx = self._magnitude_names.get(magnitude, -1)
+        if mag_idx < 0:
+            return
+        all_units = list(self._magnitudes[mag_idx].keys())
+
+        from_unit = self._cb_unit1.currentText()
+        to_unit = self._cb_unit2.currentText()
+        sweep_text = self._sweep1.text()
+
+        dlg = _BatchDialog(
+            magnitude=magnitude,
+            from_unit=from_unit,
+            to_unit=to_unit,
+            all_units=all_units,
+            sweep_text=sweep_text,
+            parent=self,
+            colors=self._active_colors,
+        )
+        dlg.exec()
 
     def _show_settings(self) -> None:
         """Open the Settings dialog (TASK 2)."""
@@ -1074,6 +1824,90 @@ class MainWindow(QWidget):
     def _exit(self) -> None:
         """Clean Qt teardown — no cargo-cult del/gc dance."""
         QApplication.quit()
+
+    # ------------------------------------------------------------------
+    # Clipboard integration (SPEC-15)
+    # ------------------------------------------------------------------
+
+    def _copy_result(self) -> None:
+        """
+        Copy the current conversion result to the system clipboard (SPEC-15).
+
+        Behaviour
+        ---------
+        - If the focused widget is an entry field (``_entry1`` or ``_entry2``)
+          with selected text, this method does nothing — the standard
+          QLineEdit Ctrl+C handler takes care of selection-copy.
+        - Otherwise, copies a full human-readable expression::
+
+              "<from_value> <from_unit> = <to_value> <to_unit>"
+
+          using :func:`unit_converter.gui.clipboard.build_copy_expression`.
+
+        The "To" slot result (``_entry2``) is the copy target when the user
+        edits the "From" field (slot 1), which is the normal direction.
+        If the magnitude selector is at ``*Select magnitude*`` no text is
+        copied and the method returns silently.
+        """
+        # Guard: if any entry has an active text selection, let the native
+        # QLineEdit copy handle it (do not interfere).
+        focus = QApplication.focusWidget()
+        for entry in (self._entry1, self._entry2):
+            if focus is entry and entry.hasSelectedText():
+                # Let the default handler proceed — we do nothing.
+                return
+
+        magnitude = self._cb_magnitude.currentText()
+        if magnitude == "*Select magnitude*":
+            return
+
+        from_value = self._entry1.text()
+        from_unit = self._cb_unit1.currentText()
+        to_value = self._entry2.text()
+        to_unit = self._cb_unit2.currentText()
+
+        expression = _build_copy_expression(from_value, from_unit, to_value, to_unit)
+        QApplication.clipboard().setText(expression)
+        logger.debug("Clipboard: copied %r", expression)
+
+    def _paste_value(self) -> None:
+        """
+        Paste a numeric value from the clipboard into the focused entry (SPEC-15).
+
+        Behaviour
+        ---------
+        - Reads the system clipboard text and passes it through
+          :func:`unit_converter.gui.clipboard.parse_pasted_number`.
+        - If the result is ``None`` (garbage / non-numeric / non-finite), the
+          paste is silently rejected — no popup, consistent with SPEC-19/SPEC-01.
+          A debug log message records the rejected text.
+        - If valid, populates the focused entry field (``_entry1`` or
+          ``_entry2``) and triggers conversion via ``_unit_converter``.
+        - If no entry field is focused, attempts ``_entry1`` as the default
+          target (consistent with the primary "From" direction).
+        """
+        clipboard_text = QApplication.clipboard().text()
+        value = _parse_pasted_number(clipboard_text)
+        if value is None:
+            logger.debug(
+                "Clipboard paste rejected (non-numeric): %r", clipboard_text
+            )
+            return
+
+        focus = QApplication.focusWidget()
+        if focus is self._entry2:
+            target = self._entry2
+            slot = 2
+        else:
+            # Default target: entry1 (covers focus on a non-entry widget or entry1)
+            target = self._entry1
+            slot = 1
+
+        if not target.isEnabled():
+            return
+
+        target.setText(str(value))
+        self._unit_converter(slot)
 
     # ------------------------------------------------------------------
     # Magnitude selection
@@ -1200,7 +2034,9 @@ class MainWindow(QWidget):
             self._val2_old = result
 
             self._entry2.blockSignals(True)
-            self._entry2.setText(f"{result}")
+            self._entry2.setText(
+                _format_result(result, self._sweep2.text())
+            )
             self._entry2.blockSignals(False)
 
             order_exp2 = order_table.get(order_to, 0)
@@ -1255,7 +2091,9 @@ class MainWindow(QWidget):
             self._val1_old = result
 
             self._entry1.blockSignals(True)
-            self._entry1.setText(f"{result}")
+            self._entry1.setText(
+                _format_result(result, self._sweep1.text())
+            )
             self._entry1.blockSignals(False)
 
             order_exp1 = order_table.get(order_from, 0)

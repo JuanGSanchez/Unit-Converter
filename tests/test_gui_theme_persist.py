@@ -55,10 +55,23 @@ from unit_converter.gui.theme import (
 
 
 def test_no_pyside6_imported() -> None:
-    """theme_persist must be importable without PySide6."""
-    pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-    assert pyside_modules == [], (
-        f"PySide6 was imported as a side-effect of theme_persist: {pyside_modules}"
+    """theme_persist source must not contain any PySide6 import statement.
+
+    Checking sys.modules is ordering-dependent (other test modules in the same
+    pytest session may import PySide6 legitimately).  Scanning the source text
+    is order-independent and directly verifies the Qt-freedom requirement.
+    """
+    src_path = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "theme_persist.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    pyside_imports = [
+        line.strip() for line in src.splitlines()
+        if line.strip().startswith(("from PySide6", "import PySide6"))
+    ]
+    assert pyside_imports == [], (
+        f"theme_persist.py contains PySide6 import(s): {pyside_imports}"
     )
 
 
@@ -475,22 +488,44 @@ class TestBuildDialogStylesheet:
         )
 
     def test_no_pyside6_imported_by_theme(self) -> None:
-        # build_dialog_stylesheet must remain importable without Qt.
-        pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-        assert pyside_modules == [], (
-            f"PySide6 was pulled in as a side-effect of theme: {pyside_modules}"
+        # theme.py must not contain any PySide6 import statement.
+        # Source-text scan is order-independent; sys.modules checks are not
+        # (other test modules in the same session may import PySide6 legitimately).
+        src_path = (
+            Path(__file__).resolve().parent.parent
+            / "unit_converter" / "gui" / "theme.py"
+        )
+        src = src_path.read_text(encoding="utf-8")
+        pyside_imports = [
+            line.strip() for line in src.splitlines()
+            if line.strip().startswith(("from PySide6", "import PySide6"))
+        ]
+        assert pyside_imports == [], (
+            f"theme.py contains PySide6 import(s): {pyside_imports}"
         )
 
 
 # =========================================================================
-# Hover-tooltip invariant lock  (Qt-free: source-text scan only)
-# Guards the repo's tooltip invariant — every interactive control keeps its
-# hover tooltip. We assert the count of setToolTip(...) calls in the GUI does
-# not regress below the established floor, without importing PySide6.
+# Widget-info invariant lock  (Qt-free: source-text scan only)  [SPEC-01]
+#
+# Guards the SPEC-01 centralized-info invariants:
+#
+# 1. No inline setToolTip( call remains in main_window.py — all tooltips must
+#    go through register_info (info_registry module).
+#
+# 2. register_info is imported and used; description.py has been deleted.
+#
+# 3. The info_registry module and its register_info helper exist.
+#
+# 4. The single QToolTip QSS block is present in theme.py.
+#
+# All checks are pure source-text scans — no Qt/display required.
 # =========================================================================
 
-# Floor established after the Light/Dark theming + Settings pass.
-_MIN_SETTOOLTIP_CALLS = 19
+# Minimum number of register_info call-sites expected in main_window.py.
+# 23 original setToolTip + 2 attach_description sites collapsed into
+# register_info calls (some merge to one key per widget).
+_MIN_REGISTER_INFO_CALLS = 20
 
 
 def _main_window_source() -> str:
@@ -501,20 +536,149 @@ def _main_window_source() -> str:
     return src.read_text(encoding="utf-8")
 
 
-class TestTooltipInvariant:
-    """The GUI must keep its hover tooltips (CLAUDE.md GUI tooltip invariant).
-    Counted by scanning the source text so no Qt/display is required."""
+def _info_registry_source() -> str:
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "info_registry.py"
+    )
+    return src.read_text(encoding="utf-8")
 
-    def test_setooltip_count_does_not_regress(self) -> None:
+
+def _theme_source() -> str:
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "theme.py"
+    )
+    return src.read_text(encoding="utf-8")
+
+
+class TestTooltipInvariant:
+    """
+    SPEC-01 widget-info invariants — pure source-text scans, no Qt required.
+
+    Invariant 1 (no inline tooltips): main_window.py must NOT call
+    setToolTip( directly; all info text goes through register_info.
+
+    Invariant 2 (register_info coverage floor): the number of register_info(
+    call-sites must not regress below the established floor.
+
+    Invariant 3 (registry present): info_registry.py must exist and export
+    register_info and INFO_TEXTS.
+
+    Invariant 4 (bespoke overlay deleted): description.py must not exist.
+
+    Invariant 5 (single QSS theming): theme.py must contain exactly one
+    QToolTip { ... } styling block.
+    """
+
+    # -- Invariant 1: no inline setToolTip in main_window.py --
+
+    def test_no_inline_settoolTip_in_main_window(self) -> None:
         count = _main_window_source().count("setToolTip(")
-        assert count >= _MIN_SETTOOLTIP_CALLS, (
-            f"setToolTip( count regressed: found {count}, "
-            f"expected >= {_MIN_SETTOOLTIP_CALLS}. A hover tooltip was dropped."
+        assert count == 0, (
+            f"Found {count} inline setToolTip( call(s) in main_window.py. "
+            "All tooltips must go through register_info (SPEC-01)."
         )
+
+    def test_no_tip_helper_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "def _tip(" not in src, (
+            "_tip() rich-text helper still present in main_window.py — "
+            "it must be deleted (SPEC-01 mandates plain-text registry)."
+        )
+
+    # -- Invariant 2: register_info coverage floor --
+
+    def test_register_info_imported_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "register_info" in src, (
+            "register_info is not imported/used in main_window.py. "
+            "Tooltip registration is broken (SPEC-01)."
+        )
+
+    def test_register_info_call_count_not_below_floor(self) -> None:
+        count = _main_window_source().count("_register_info(")
+        assert count >= _MIN_REGISTER_INFO_CALLS, (
+            f"_register_info( call count too low: found {count}, "
+            f"expected >= {_MIN_REGISTER_INFO_CALLS}. "
+            "A widget lost its info registration (SPEC-01)."
+        )
+
+    # -- Invariant 3: info_registry.py API surface --
+
+    def test_info_registry_module_exists(self) -> None:
+        src = _info_registry_source()
+        assert len(src) > 100, "info_registry.py is missing or nearly empty"
+
+    def test_info_registry_exports_register_info(self) -> None:
+        src = _info_registry_source()
+        assert "def register_info(" in src, (
+            "register_info function not found in info_registry.py."
+        )
+
+    def test_info_registry_exports_info_texts(self) -> None:
+        src = _info_registry_source()
+        assert "INFO_TEXTS" in src, (
+            "INFO_TEXTS dict not found in info_registry.py."
+        )
+
+    def test_info_registry_exports_info_keys(self) -> None:
+        src = _info_registry_source()
+        assert "INFO_KEYS" in src, (
+            "INFO_KEYS frozenset not found in info_registry.py."
+        )
+
+    # -- Invariant 4: bespoke overlay deleted --
+
+    def test_description_py_does_not_exist(self) -> None:
+        desc_path = (
+            Path(__file__).resolve().parent.parent
+            / "unit_converter" / "gui" / "description.py"
+        )
+        assert not desc_path.exists(), (
+            "description.py still exists — it must be deleted (SPEC-01: "
+            "the only info surface is QToolTip, not a bespoke overlay)."
+        )
+
+    def test_attach_description_not_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "attach_description" not in src, (
+            "attach_description still referenced in main_window.py — "
+            "the bespoke overlay is fully replaced by register_info (SPEC-01)."
+        )
+
+    # -- Invariant 5: single QSS theming in theme.py --
+
+    def test_theme_py_has_qtoolTip_qss_block(self) -> None:
+        src = _theme_source()
+        assert "QToolTip" in src, (
+            "QToolTip QSS block not found in theme.py — "
+            "tooltip styling must derive from the single theme QSS block (SPEC-01)."
+        )
+
+    def test_theme_py_has_build_tooltip_stylesheet(self) -> None:
+        src = _theme_source()
+        assert "def build_tooltip_stylesheet(" in src, (
+            "build_tooltip_stylesheet not found in theme.py."
+        )
+
+    # -- Qt-freedom guard (unchanged) --
 
     def test_no_pyside6_imported_by_this_scan(self) -> None:
-        # The invariant check is pure text scanning — Qt must not be imported.
-        pyside_modules = [k for k in sys.modules if k.startswith("PySide6")]
-        assert pyside_modules == [], (
-            f"PySide6 was pulled in unexpectedly: {pyside_modules}"
-        )
+        # theme_persist.py and theme.py must not contain PySide6 import
+        # statements.  Source-text scan is order-independent; checking
+        # sys.modules is not safe when other test modules in the same
+        # pytest session legitimately import PySide6.
+        for mod_rel in (
+            ("unit_converter", "gui", "theme_persist.py"),
+            ("unit_converter", "gui", "theme.py"),
+        ):
+            src_path = Path(__file__).resolve().parent.parent.joinpath(*mod_rel)
+            src = src_path.read_text(encoding="utf-8")
+            bad = [
+                line.strip() for line in src.splitlines()
+                if line.strip().startswith(("from PySide6", "import PySide6"))
+            ]
+            assert bad == [], (
+                f"{src_path.name} contains PySide6 import(s): {bad}"
+            )

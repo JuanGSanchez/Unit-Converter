@@ -17,6 +17,12 @@ principles_applied:
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Gate Custody & Deterministic Tests
@@ -42,6 +48,8 @@ A developer or orchestrator handing a test/coverage item ID (UC-B04, UC-B06, UC-
 
 ## Discipline (referenced)
 Follow `.claude/instructions/ai-execution-discipline.md` and `.claude/instructions/python-repo-conventions.md`.
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing scripts for deterministic work; MAY write an ephemeral script (run→consume→discard) over inline reasoning (R18/P11).
+Use `/checklist` (`.claude/skills/checklist/SKILL.md`) as the done-check backend; it delegates to `run-quality-gate`.
 
 ## Behavioral Rules
 1. Always place a test in the right file by area: core math/data → `test_converter.py`/`test_data_loader.py`; compound → `test_expr.py`; rates → `test_rates.py`; history → `test_history.py`; access/async/MCP contract → `test_api_smoke.py`/`test_api_routes.py`/`test_service_validation.py`.

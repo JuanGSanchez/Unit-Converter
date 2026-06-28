@@ -18,6 +18,12 @@ principles_applied:
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Dispatch-Not-Do Boundary
@@ -62,6 +68,8 @@ A developer (or the top-level session) handing over a request that spans subsyst
 
 ## Discipline (referenced, not restated)
 Follow `.claude/instructions/ai-execution-discipline.md` (verify-before-act, assumption checks, minimal change, stop-and-confirm on ambiguous/irreversible, acceptance-criteria-driven done, context-budget discipline). The authoritative invariants and gate commands are in `CLAUDE.md`; the work list is `docs/BACKLOG.md`.
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing scripts via Bash for deterministic dispatch; holds no Edit/Write tool (R18/P11).
+SDD stage ordering: run `specify`→`clarify`→`plan`→`tasks` before dispatching dev agents; enforce `.claude/instructions/sdd-constitution.md` gate rules (a stage must complete before the next opens).
 
 ## Behavioral Rules
 1. Always ground before dispatching: read the relevant `CLAUDE.md` invariants and the `docs/BACKLOG.md` item(s), and verify the real current state (the backlog is stale by policy) — never plan off backlog line numbers or assumed status.

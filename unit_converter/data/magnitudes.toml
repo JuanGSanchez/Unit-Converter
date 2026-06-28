@@ -19,6 +19,12 @@
 #
 # Read by: unit_converter.core.data_loader._load_toml  (Python tomllib, stdlib >=3.11)
 #
+# Sources / authorities cited inline for non-obvious factors:
+#   NIST SP 811 (2008 ed.)  — https://www.nist.gov/pml/special-publication-811
+#   BIPM SI Brochure 9th ed. — https://www.bipm.org/en/publications/si-brochure
+#   IAU 2012 nominal values  — https://www.iau.org/static/resolutions/IAU2012_English.pdf
+#   NIST CODATA 2018         — https://physics.nist.gov/cuu/Constants/
+#
 # Legacy-to-canonical unit name mapping (UC-B09)
 # ----------------------------------------------
 # The original Magnitudes.txt used different spellings for some units.
@@ -31,85 +37,149 @@
 # If you load the legacy Magnitudes.txt file directly, unit names may differ.
 # The TOML loader (this file) is the source of truth for all supported names.
 
+# ---------------------------------------------------------------------------
+# Mass — base unit: gram (g)
+# ---------------------------------------------------------------------------
 [Mass]
 base_unit = "gram (g)"
 
 [Mass.units]
-"gram (g)"       = 1.0
-"Av. pound (lb)" = 453.6
-"Av. ounce (oz)" = 28.35
+"gram (g)"            = 1.0
+"Av. pound (lb)"      = 453.59237          # NIST SP 811 Table B.8: 1 lb = 453.592 37 g (exact)
+"Av. ounce (oz)"      = 28.349523125       # NIST SP 811: 1 oz = 28.349 523 125 g (exact, 1 lb / 16)
+"tonne (t)"           = 1.0e6              # 1 t = 1000 kg = 1 000 000 g (SI definition)
+"stone (st)"          = 6350.29318         # NIST SP 811: 1 stone = 14 lb = 14 × 453.592 37 g
+"grain (gr)"          = 0.06479891         # NIST SP 811: 1 grain = 64.798 91 mg (exact)
+"carat (ct)"          = 0.2                # 1 metric carat = 200 mg (exact, BIPM)
+"slug"                = 14593.90294        # NIST SP 811: 1 slug = 14.593 902 94 kg (= 1 lbf·s²/ft)
+"unified atomic mass unit (u)" = 1.66053906660e-24  # NIST CODATA 2018: 1 u = 1.660 539 066 60 × 10⁻²⁴ g
 
+# ---------------------------------------------------------------------------
+# Length — base unit: meter (m)
+# ---------------------------------------------------------------------------
 [Length]
 base_unit = "meter (m)"
 
 [Length.units]
-"meter (m)" = 1.0
-"inch (in)" = 0.0254
-"yard (yd)" = 0.9144
-"mile (mi)" = 1609.34
+"meter (m)"              = 1.0
+"inch (in)"              = 0.0254           # exact by definition (NIST SP 811)
+"foot (ft)"              = 0.3048           # exact: 1 ft = 0.3048 m (NIST SP 811)
+"yard (yd)"              = 0.9144           # exact: 1 yd = 0.9144 m (NIST SP 811)
+"mile (mi)"              = 1609.344         # exact: 1 mi = 1609.344 m (NIST SP 811 Table B.8)
+"nautical mile (nmi)"    = 1852.0           # exact: 1 nmi = 1852 m (BIPM / IHO)
+"ångström (Å)"           = 1.0e-10          # 1 Å = 10⁻¹⁰ m (NIST SP 811)
+"astronomical unit (au)" = 1.495978707e11   # IAU 2012: 1 au = 149 597 870 700 m (exact)
+"light-year (ly)"        = 9.4607304725808e15  # IAU: 1 ly = 9.460 730 472 5808 × 10¹⁵ m
+"parsec (pc)"            = 3.085677581491367e16  # IAU: 1 pc = (648000/π) au ≈ 3.0857 × 10¹⁶ m
 
+# ---------------------------------------------------------------------------
+# Area — base unit: square meter (m²)
+# ---------------------------------------------------------------------------
 [Area]
 base_unit = "square meter (m²)"
 
 [Area.units]
-"square meter (m²)" = 1.0
-"square inch (in²)" = 0.00064516
-"square yard (yd²)" = 0.836127
-"square mile (mi²)" = 2590000.0
+"square meter (m²)"  = 1.0
+"square inch (in²)"  = 6.4516e-4           # exact: (0.0254)² (NIST SP 811)
+"square foot (ft²)"  = 0.09290304          # exact: (0.3048)²
+"square yard (yd²)"  = 0.83612736          # exact: (0.9144)²; corrected from 0.836127
+"square mile (mi²)"  = 2589988.110336      # exact: (1609.344)²; corrected from 2590000.0 (NIST SP 811)
+"acre"               = 4046.8564224        # exact: 1 acre = 4840 yd² = 4046.856 422 4 m² (NIST SP 811)
+"hectare (ha)"       = 10000.0             # exact: 1 ha = 10⁴ m²
+"are (a)"            = 100.0               # exact: 1 a = 100 m² (SI)
 
+# ---------------------------------------------------------------------------
+# Volume — base unit: cubic meter (m³)
+# ---------------------------------------------------------------------------
 [Volume]
 base_unit = "cubic meter (m³)"
 
 [Volume.units]
-"cubic meter (m³)" = 1.0
-"litre (l)"        = 0.001
-"Imp. pint (pt)"   = 0.000568261
-"US pint (pt)"     = 0.000473176
+"cubic meter (m³)"        = 1.0
+"litre (l)"               = 0.001             # exact: 1 L = 10⁻³ m³
+"cubic inch (in³)"        = 1.6387064e-5      # exact: (0.0254)³ (NIST SP 811)
+"cubic foot (ft³)"        = 0.028316846592    # exact: (0.3048)³
+"US gallon (gal)"         = 3.785411784e-3    # exact: 1 US gal = 231 in³ (NIST SP 811)
+"Imp. gallon (gal Imp.)"  = 4.54609e-3        # exact: 1 Imp. gal = 4.546 09 L (UK definition 1985)
+"US quart (qt)"           = 9.46352946e-4     # exact: 1 US qt = ¼ US gal
+"Imp. quart (qt Imp.)"    = 1.1365225e-3      # exact: ¼ Imp. gal
+"US fluid ounce (fl oz)"  = 2.95735295625e-5  # exact: 1 US fl oz = 1/128 US gal (NIST SP 811)
+"Imp. pint (pt Imp.)"     = 5.68261e-4        # exact: ⅛ Imp. gal; NIST SP 811
+"US pint (pt)"            = 4.73176473e-4     # exact: ½ US qt
+"US cup (cup)"            = 2.365882365e-4    # exact: ½ US pint (NIST)
+"US tablespoon (tbsp)"    = 1.47867647813e-5  # exact: 1 tbsp = ½ fl oz
+"US teaspoon (tsp)"       = 4.92892159375e-6  # exact: ⅓ tbsp = 1/6 fl oz
+"oil barrel (bbl)"        = 0.158987294928    # exact: 1 bbl = 42 US gal (NIST SP 811)
 
+# ---------------------------------------------------------------------------
+# Time — base unit: second (s)
+# ---------------------------------------------------------------------------
 [Time]
 base_unit = "second (s)"
 
 [Time.units]
-"second (s)" = 1.0
-"minute (min)" = 60.0
-"hour (hr)"    = 3600.0
-"day (d)"      = 86400.0
+"second (s)"    = 1.0
+"minute (min)"  = 60.0
+"hour (hr)"     = 3600.0
+"day (d)"       = 86400.0
+"week (wk)"     = 604800.0                  # exact: 7 × 86400 s
+"Julian year (a)" = 31557600.0              # exact: 365.25 × 86400 s (IAU definition)
 
+# ---------------------------------------------------------------------------
+# Energy — base unit: joule (J)
+# ---------------------------------------------------------------------------
 [Energy]
 base_unit = "joule (J)"
 
 [Energy.units]
-"joule (J)"        = 1.0
-"calorie (cal)"    = 4.184
-"electronvolt (eV)" = 1.6022e-19
-"watt-hour (Wh)"   = 3600.0
+"joule (J)"               = 1.0
+"calorie (cal)"           = 4.184            # exact: 1 thermochemical cal = 4.184 J (NIST SP 811)
+"electronvolt (eV)"       = 1.602176634e-19  # exact: e × 1 V; NIST CODATA 2018 / SI 2019
+"watt-hour (Wh)"          = 3600.0           # exact: 1 Wh = 3600 J
+"BTU (IT)"                = 1055.05585262    # NIST SP 811: 1 BTU_IT = 1055.055 852 62 J
+"foot-pound force (ft·lbf)" = 1.3558179483314004  # NIST SP 811: 1 ft·lbf = 0.3048 × 4.4482216 J
+"therm (EC)"              = 1.05505585262e8  # exact: 1 therm = 100 000 BTU_IT
+"ton of TNT (tTNT)"       = 4.184e9          # NIST SP 811: 1 ton TNT = 10⁹ cal = 4.184 × 10⁹ J
 
+# ---------------------------------------------------------------------------
+# Power — base unit: watt (W)
+# ---------------------------------------------------------------------------
 [Power]
 base_unit = "watt (W)"
 
 [Power.units]
-"watt (W)"  = 1.0
-"kgm/s"     = 9.806215
-"cal/h"     = 1163.0556
-"erg/s"     = 1e-7
-"HP"        = 745.7
-"CV"        = 735.35375
+"watt (W)"        = 1.0
+"kgm/s"           = 9.80665               # 1 kgf·m/s = g_n × 1 W; g_n = 9.806 65 m/s² (exact, BIPM)
+"cal/h"           = 1.1622222222222222e-3  # 1 cal_th/h = 4.184/3600 W (NIST SP 811 Table B.9 cal_th)
+"erg/s"           = 1e-7                  # exact: 1 erg/s = 10⁻⁷ W
+"HP"              = 745.6998715822702     # mechanical horsepower: 550 ft·lbf/s = 550 × 0.3048 × 4.4482216152605 W (NIST SP 811)
+"CV"              = 735.49875             # metric horsepower (PS/CV): 75 kgf·m/s = 75 × 9.80665 W (exact)
+"BTU/h"           = 0.29307107017222     # 1 BTU_IT/h = 1055.055 852 62 / 3600 W (NIST SP 811)
 
+# ---------------------------------------------------------------------------
+# Pressure — base unit: Pascal (Pa)
+# ---------------------------------------------------------------------------
 [Pressure]
 base_unit = "Pascal (Pa)"
 
 [Pressure.units]
-"Pascal (Pa)"      = 1.0
-"bar (b)"          = 100000.0
-"atmosphere (atm)" = 101325.0
-"mm Hg"            = 133.322
-"Torr (Torr)"      = 133.322
+"Pascal (Pa)"              = 1.0
+"bar (b)"                  = 100000.0         # exact: 1 bar = 10⁵ Pa
+"atmosphere (atm)"         = 101325.0         # exact: 1 atm = 101 325 Pa (BIPM)
+"mm Hg"                    = 133.322387415    # NIST SP 811: 1 mmHg = 133.322 387 415 Pa
+"Torr (Torr)"              = 133.32236842105263  # exact: 1 Torr = 101325/760 Pa (differs slightly from mmHg conventional)
+"pound per sq. inch (psi)" = 6894.757293168   # NIST SP 811: 1 psi = 6894.757 293 168 Pa
+"inch Hg (inHg)"           = 3386.388640341   # NIST SP 811: 1 inHg = 3386.388 640 341 Pa
+"technical atmosphere (at)"= 98066.5          # exact: 1 at = 1 kgf/cm² = 9.806 65 × 10⁴ Pa (BIPM)
 
-[Data]
-base_unit = "bit (b)"
+# ---------------------------------------------------------------------------
+# Data — base unit: bit (b)
 # Note: order-of-magnitude scaling for Data uses base 1024 (IEC prefixes),
 # not base 10 (SI prefixes).  This is handled by the converter; the factors
 # here are the *unit* conversion factors only (bit <-> byte).
+# ---------------------------------------------------------------------------
+[Data]
+base_unit = "bit (b)"
 
 [Data.units]
 "bit (b)"  = 1.0
@@ -159,3 +229,159 @@ base_unit = "kelvin (K)"
 "celsius (°C)"   = 1.0
 "fahrenheit (°F)" = 0.5555555555555556
 "rankine (°R)"   = 0.5555555555555556
+
+# ---------------------------------------------------------------------------
+# Frequency — base unit: hertz (Hz)
+# ---------------------------------------------------------------------------
+[Frequency]
+base_unit = "hertz (Hz)"
+
+[Frequency.units]
+"hertz (Hz)"              = 1.0
+"rpm (rpm)"               = 0.016666666666666666  # exact: 1 rpm = 1/60 Hz
+
+# ---------------------------------------------------------------------------
+# Force — base unit: newton (N)
+# ---------------------------------------------------------------------------
+[Force]
+base_unit = "newton (N)"
+
+[Force.units]
+"newton (N)"              = 1.0
+"dyne (dyn)"              = 1.0e-5            # exact: 1 dyn = 10⁻⁵ N (CGS)
+"kilogram-force (kgf)"    = 9.80665           # exact: 1 kgf = g_n N; g_n = 9.806 65 m/s² (BIPM)
+"pound-force (lbf)"       = 4.4482216152605   # NIST SP 811: 1 lbf = 4.448 221 615 260 5 N
+
+# ---------------------------------------------------------------------------
+# Speed — base unit: meter per second (m/s)
+# ---------------------------------------------------------------------------
+[Speed]
+base_unit = "meter per second (m/s)"
+
+[Speed.units]
+"meter per second (m/s)"  = 1.0
+"kilometer per hour (km/h)" = 0.27777777777777778  # exact: 1/3.6 m/s
+"mile per hour (mph)"     = 0.44704              # exact: 1609.344 / 3600 m/s (NIST SP 811)
+"knot (kn)"               = 0.5144444444444444   # exact: 1852 / 3600 m/s (BIPM / IHO)
+"foot per second (ft/s)"  = 0.3048               # exact: 1 ft/s = 0.3048 m/s
+
+# ---------------------------------------------------------------------------
+# Acceleration — base unit: meter per second squared (m/s²)
+# ---------------------------------------------------------------------------
+[Acceleration]
+base_unit = "meter per second squared (m/s²)"
+
+[Acceleration.units]
+"meter per second squared (m/s²)" = 1.0
+"standard gravity (g_n)"  = 9.80665            # exact: g_n = 9.806 65 m/s² (BIPM / ISO 80000-3)
+"gal (Gal)"               = 0.01               # exact: 1 Gal = 0.01 m/s² (CGS unit of acceleration)
+
+# ---------------------------------------------------------------------------
+# Plane angle — base unit: radian (rad)
+# ---------------------------------------------------------------------------
+[Plane_angle]
+base_unit = "radian (rad)"
+
+[Plane_angle.units]
+"radian (rad)"    = 1.0
+"degree (°)"      = 0.017453292519943295   # exact: π/180 (NIST SP 811)
+"gradian (grad)"  = 0.015707963267948966   # exact: π/200
+"arcminute (′)"   = 2.908882086657216e-4   # exact: π/10800
+"arcsecond (″)"   = 4.84813681109536e-6    # exact: π/648000
+"turn (rev)"      = 6.283185307179586      # exact: 2π
+
+# ---------------------------------------------------------------------------
+# Electric charge — base unit: coulomb (C)
+# ---------------------------------------------------------------------------
+[Electric_charge]
+base_unit = "coulomb (C)"
+
+[Electric_charge.units]
+"coulomb (C)"             = 1.0
+"ampere-hour (Ah)"        = 3600.0            # exact: 1 Ah = 3600 C
+"elementary charge (e)"   = 1.602176634e-19   # exact (SI 2019 / NIST CODATA 2018): e = 1.602 176 634 × 10⁻¹⁹ C
+
+# ---------------------------------------------------------------------------
+# Voltage — base unit: volt (V)
+# ---------------------------------------------------------------------------
+[Voltage]
+base_unit = "volt (V)"
+
+[Voltage.units]
+"volt (V)"        = 1.0
+"millivolt (mV)"  = 0.001                  # exact: 10⁻³ V (named prefix variant for convenience)
+"kilovolt (kV)"   = 1000.0                 # exact: 10³ V
+
+# ---------------------------------------------------------------------------
+# Electric resistance — base unit: ohm (Ω)
+# ---------------------------------------------------------------------------
+[Electric_resistance]
+base_unit = "ohm (Ω)"
+
+[Electric_resistance.units]
+"ohm (Ω)"         = 1.0
+"milliohm (mΩ)"   = 0.001                  # exact: 10⁻³ Ω
+"kilohm (kΩ)"     = 1000.0                 # exact: 10³ Ω
+"megohm (MΩ)"     = 1.0e6                  # exact: 10⁶ Ω
+
+# ---------------------------------------------------------------------------
+# Density — base unit: kilogram per cubic meter (kg/m³)
+# ---------------------------------------------------------------------------
+[Density]
+base_unit = "kilogram per cubic meter (kg/m³)"
+
+[Density.units]
+"kilogram per cubic meter (kg/m³)" = 1.0
+"gram per cubic centimeter (g/cm³)" = 1000.0  # exact: 1 g/cm³ = 1000 kg/m³
+"gram per litre (g/l)"              = 1.0      # exact: 1 g/L = 1 kg/m³
+
+# ---------------------------------------------------------------------------
+# Amount of substance — base unit: mole (mol)
+# ---------------------------------------------------------------------------
+[Amount_of_substance]
+base_unit = "mole (mol)"
+
+[Amount_of_substance.units]
+"mole (mol)"      = 1.0
+"millimole (mmol)" = 0.001                 # exact: 10⁻³ mol
+"micromole (µmol)" = 1.0e-6               # exact: 10⁻⁶ mol
+
+# ---------------------------------------------------------------------------
+# Radiation — Absorbed dose — base unit: gray (Gy)
+# ---------------------------------------------------------------------------
+[Absorbed_dose]
+base_unit = "gray (Gy)"
+
+[Absorbed_dose.units]
+"gray (Gy)"       = 1.0
+"rad (rad)"       = 0.01                   # exact: 1 rad = 0.01 Gy (NIST SP 811)
+
+# ---------------------------------------------------------------------------
+# Radiation — Equivalent dose — base unit: sievert (Sv)
+# ---------------------------------------------------------------------------
+[Equivalent_dose]
+base_unit = "sievert (Sv)"
+
+[Equivalent_dose.units]
+"sievert (Sv)"    = 1.0
+"rem (rem)"       = 0.01                   # exact: 1 rem = 0.01 Sv (NIST SP 811)
+
+# ---------------------------------------------------------------------------
+# Radiation — Radioactivity — base unit: becquerel (Bq)
+# ---------------------------------------------------------------------------
+[Radioactivity]
+base_unit = "becquerel (Bq)"
+
+[Radioactivity.units]
+"becquerel (Bq)"  = 1.0
+"curie (Ci)"      = 3.7e10                 # exact: 1 Ci = 3.7 × 10¹⁰ Bq (NIST SP 811)
+
+# ---------------------------------------------------------------------------
+# Radiation — Exposure — base unit: coulomb per kilogram (C/kg)
+# ---------------------------------------------------------------------------
+[Radiation_exposure]
+base_unit = "coulomb per kilogram (C/kg)"
+
+[Radiation_exposure.units]
+"coulomb per kilogram (C/kg)" = 1.0
+"röntgen (R)"     = 2.58e-4                # exact: 1 R = 2.58 × 10⁻⁴ C/kg (NIST SP 811)

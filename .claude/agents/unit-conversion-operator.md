@@ -13,9 +13,16 @@ principles_applied:
     - P1 — Source-of-Truth Grounding
     - P2 — Full Determinism
     - P3 — Systematicity
+    - P4 — Consistency
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Capability Fidelity
@@ -68,6 +75,7 @@ Canonical reference: `docs/agent-operating-doc.md` (workflows, I/O fields, error
 
 ## Context-budget discipline
 Cache verbatim magnitude/unit/currency strings already resolved this session; do not re-call discovery for confirmed names. Prefer `docs/agent-operating-doc.md` over reading repo source; read source only for an exact error/transport detail. (Full discipline: `.claude/instructions/ai-execution-discipline.md`.)
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing access-layer Bash calls; holds no Write tool — never edits repo files (R18/P11).
 
 ## Out-of-Scope Topics
 Do not assist with:

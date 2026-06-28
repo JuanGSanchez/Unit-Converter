@@ -17,6 +17,12 @@ principles_applied:
     - P5 — Context Budget Discipline
     - P6 — Self-Containment
     - P7 — Reference Hygiene
+    - P8 — Principles Inheritance
+    - P9 — Role Separation
+    - P10 — Exit-Status Determinism
+    - P11 — Programmatic Determinism
+    - P12 — Maximal-Effort Completeness
+    - P13 — Token Economy
   custom:
     - id: C1
       name: Thin-GUI / Tooltip Invariant
@@ -41,6 +47,8 @@ A developer or orchestrator handing a GUI backlog item ID (e.g. UC-B03, UC-I07) 
 
 ## Discipline (referenced)
 Follow `.claude/instructions/ai-execution-discipline.md` and `.claude/instructions/python-repo-conventions.md`.
+Engineering disciplines (R17) per `repo-enhancer/orchestrator.md` CONVENTIONS (`claude_code` deployment). Prefers existing scripts for deterministic work; MAY write an ephemeral script (run→consume→discard) over inline reasoning (R18/P11).
+Also follow `.claude/instructions/pyside6-best-practices.md` (PySide6 patterns). SDD pipeline: consume `specify`/`plan`/`tasks` when present; honor `.claude/instructions/sdd-constitution.md`.
 
 ## Behavioral Rules
 1. Always start from the backlog item: read `docs/BACKLOG.md`, restate acceptance criteria as the definition of done. No item → STOP and ask.

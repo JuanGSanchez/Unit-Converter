@@ -157,7 +157,10 @@ tools, same core.
 #### GET /magnitudes
 
 ```json
-["Area", "Data", "Energy", "Length", "Mass", "Power", "Pressure", "Time", "Volume"]
+["Absorbed_dose", "Acceleration", "Amount_of_substance", "Area", "Data", "Density",
+ "Electric_charge", "Electric_resistance", "Energy", "Equivalent_dose", "Force", "Frequency",
+ "Length", "Mass", "Plane_angle", "Power", "Pressure", "Radiation_exposure", "Radioactivity",
+ "Speed", "Temperature", "Temperature_delta", "Time", "Voltage", "Volume"]
 ```
 
 #### GET /magnitudes/{magnitude}/units
@@ -343,6 +346,18 @@ Returns HTTP 201. HTTP 422 on validation failure (empty name, factor ≤ 0, inva
 
 FastMCP auto-generates one MCP tool per FastAPI route. The 16 tools exposed mirror the
 REST contract above exactly.
+
+> **Rationale — 16 tools, an accepted expansion of SPEC-04 (recorded 2026-06-28).**
+> The original product spec (`SPECIFICATIONS-archive-20260625.md`, SPEC-04) called for a
+> minimal three-tool MCP surface (`list_magnitudes`, `list_units`, `convert`). That criterion
+> is deliberately **superseded**: the shipped surface is the 16 operations above, adding
+> compound-unit parsing/conversion, currency discovery/rate/convert/refresh, conversion
+> history & favorites, and custom-unit registration. The expansion still honors the F4
+> "small, purposeful toolset" intent — every tool maps 1:1 to a single curated FastAPI
+> operation (no redundant or overlapping tools), all 16 share the one conversion core (no
+> logic fork), and the exact set is locked by `_EXPECTED_TOOL_NAMES_16` in
+> `tests/test_api_routes.py`. The number is a capability decision, not an accident; do not
+> regress it to three. Tracked as SPEC-R1.
 
 | Tool name | Derived from | Description |
 |-----------|-------------|-------------|

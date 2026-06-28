@@ -42,6 +42,17 @@ from unit_converter.core import history as _history
 from unit_converter.core.data_loader import add_custom_unit as _core_add_custom_unit
 
 # ---------------------------------------------------------------------------
+# Module-level cache for the static magnitude list
+# ---------------------------------------------------------------------------
+
+# The sorted list of magnitude names is stable after the core DB loads: no
+# API operation adds new magnitudes (add_custom_unit adds units to existing
+# magnitudes only).  Cache the sorted list on first call so subsequent
+# GET /magnitudes requests do not pay the cost of sorted() + list allocation.
+_magnitude_list_cache: "list[str] | None" = None
+
+
+# ---------------------------------------------------------------------------
 # Input-validation helpers (boundary guards for state-changing ops)
 # ---------------------------------------------------------------------------
 
@@ -85,8 +96,16 @@ def list_magnitudes() -> list[str]:
     -------
     list[str]
         Sorted magnitude names, e.g. ``['Area', 'Data', 'Energy', ...]``.
+
+    Notes
+    -----
+    The result is cached after the first call because the set of magnitudes is
+    fixed at data-load time; no API operation adds new magnitudes.
     """
-    return _core_list_magnitudes()
+    global _magnitude_list_cache
+    if _magnitude_list_cache is None:
+        _magnitude_list_cache = _core_list_magnitudes()
+    return _magnitude_list_cache
 
 
 def list_units(magnitude: str) -> dict:

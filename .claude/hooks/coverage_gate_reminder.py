@@ -4,6 +4,11 @@
 Fires AFTER Edit/Write. Non-blocking: if the edited file is under unit_converter/core/ or tests/,
 it emits a reminder (exit 0 with JSON additionalContext) to run the gate before claiming done. It
 never blocks and never fails the session — a reminder only (CLAUDE.md invariant 5 / UC-B04).
+
+## Principles Applied
+P2 Full Determinism | P8 Principles Inheritance | P11 Programmatic Determinism |
+P12 Maximal-Effort Completeness (reminds to verify coverage gate before claiming done —
+CLAUDE.md invariant 5 / UC-B04; coverage must be confirmed, not assumed).
 """
 from __future__ import annotations
 

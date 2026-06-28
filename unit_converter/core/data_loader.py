@@ -36,6 +36,7 @@ Errors
 
 from __future__ import annotations
 
+import functools
 import math
 import os
 import sys
@@ -71,12 +72,18 @@ def _default_data_dir() -> Path:
     return Path(__file__).parent.parent / "data"
 
 
+@functools.lru_cache(maxsize=None)
 def _user_data_dir() -> Path:
     """
     Return the user-writable data directory for custom units.
 
     Resolves to ``~/.unit-converter/`` on all platforms.  The directory is
     created if it does not already exist.
+
+    Result is cached after the first call: ``Path.home()`` resolution and the
+    ``mkdir`` syscall are performed at most once per process lifetime.  The
+    cache is safe because the home directory does not change at runtime and
+    ``mkdir(exist_ok=True)`` is idempotent.
     """
     user_dir = Path.home() / ".unit-converter"
     user_dir.mkdir(parents=True, exist_ok=True)
