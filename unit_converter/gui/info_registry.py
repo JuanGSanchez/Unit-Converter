@@ -172,6 +172,43 @@ INFO_TEXTS: dict[str, str] = {
     "search_apply_btn": (
         "Apply the selected unit: sets the magnitude and From-unit selectors."
     ),
+
+    # --- Batch-conversion dialog (SPEC-12) ---------------------------------
+    "batch_dialog": (
+        "Batch conversion: convert multiple values at once, or convert\n"
+        "one value to all units of the selected magnitude."
+    ),
+    "batch_mode_combo": (
+        "Select batch mode:\n"
+        "  Values list  — paste or type N values (one per line) to convert.\n"
+        "  All units    — convert one value to every unit of the magnitude."
+    ),
+    "batch_values_edit": (
+        "Enter one numeric value per line.\n"
+        "Non-numeric lines will appear as errors in the results table."
+    ),
+    "batch_single_value_edit": (
+        "The value to convert to all units of the magnitude."
+    ),
+    "batch_from_unit_combo": (
+        "Source unit for the batch conversion."
+    ),
+    "batch_to_unit_combo": (
+        "Target unit for the batch conversion (values-list mode only)."
+    ),
+    "batch_run_btn": (
+        "Run the batch conversion and display results in the table below."
+    ),
+    "batch_results_table": (
+        "Batch conversion results.\n"
+        "Rows with errors are shown with an error message instead of a value."
+    ),
+    "batch_copy_btn": (
+        "Copy the results table to the clipboard as CSV."
+    ),
+    "batch_save_btn": (
+        "Save the results table to a CSV file."
+    ),
 }
 
 #: Frozenset of all defined keys — use in tests to assert coverage.

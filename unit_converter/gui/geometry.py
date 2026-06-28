@@ -101,6 +101,7 @@ _DIALOG_DEFAULTS: dict[str, tuple[int, int]] = {
     "add_unit": (315, 190),  # _AddUnitDialog — slightly larger than old 300×180
     "settings": (450, 500),  # _SettingsDialog — slightly larger than old 430×480
     "search":   (380, 340),  # _SearchDialog (SPEC-14) — wide enough for full unit names
+    "batch":    (560, 460),  # _BatchDialog (SPEC-12) — wider for table + export buttons
 }
 
 

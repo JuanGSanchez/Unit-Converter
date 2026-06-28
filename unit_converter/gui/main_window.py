@@ -68,6 +68,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -79,6 +80,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -126,6 +130,12 @@ from unit_converter.gui.unit_search import (
     SearchHit,
     build_search_index,
     search as _search_units,
+)
+from unit_converter.gui.batch import (
+    BatchRow as _BatchRow,
+    batch_convert_values as _batch_convert_values,
+    batch_convert_to_all_units as _batch_convert_to_all_units,
+    rows_to_csv as _rows_to_csv,
 )
 
 
@@ -948,6 +958,317 @@ class _SearchDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
+# Batch-conversion dialog (SPEC-12)
+# ---------------------------------------------------------------------------
+
+class _BatchDialog(QDialog):
+    """
+    Batch-conversion dialog (SPEC-12).
+
+    Two modes are available via a drop-down selector:
+
+    - **Values list** — paste or type N values (one per line) and convert
+      them between two chosen units.  The dialog pre-fills the magnitude and
+      units from the main window's current selection.
+    - **All units** — convert one value to every unit of the selected
+      magnitude.
+
+    Results are shown in a ``QTableWidget``.  Per-row errors appear inline
+    in the table (never via a popup window — SPEC-19 consistency).
+
+    Export
+    ------
+    - *Copy table* — serialises the table to CSV and places it on the system
+      clipboard via ``QApplication.clipboard()``.
+    - *Save CSV…* — opens ``QFileDialog.getSaveFileName`` and writes the CSV
+      to the chosen path.
+
+    Tooltip invariant
+    -----------------
+    Every interactive widget uses ``_register_info``; no inline tooltip
+    literals.  All text comes from the info registry (SPEC-01).
+    """
+
+    # Mode constants
+    _MODE_VALUES = "Values list"
+    _MODE_ALL_UNITS = "All units"
+
+    def __init__(
+        self,
+        magnitude: str,
+        from_unit: str,
+        to_unit: str,
+        all_units: list[str],
+        sweep_text: str = "...",
+        parent: "QWidget | None" = None,
+        colors: "dict[str, str] | None" = None,
+    ) -> None:
+        """
+        Parameters
+        ----------
+        magnitude:
+            Current magnitude name (pre-fills the dialog; user can change
+            the units but not the magnitude in this dialog for simplicity).
+        from_unit:
+            Current from-unit (pre-selected in the from-unit combo).
+        to_unit:
+            Current to-unit (pre-selected in the to-unit combo).
+        all_units:
+            All unit names for *magnitude* (populates both unit combos).
+        sweep_text:
+            The live sweep-label text from the main window; passed to
+            ``batch_convert_values`` / ``batch_convert_to_all_units`` so
+            that displayed values match the main window's precision setting.
+        parent:
+            Optional parent widget.
+        colors:
+            Theme colour mapping from the main window.  Falls back to the
+            built-in Light palette.
+        """
+        super().__init__(parent)
+        self.setWindowTitle(f"Batch Convert — {magnitude}")
+        _w, _h = dialog_default_size("batch")
+        center_dialog_on_parent(self, _w, _h)
+        _register_info(self, "batch_dialog")
+
+        _colors = colors if colors is not None else _theme.LIGHT_THEME.colors
+        self.setStyleSheet(_theme.build_dialog_stylesheet(_colors))
+
+        self._magnitude = magnitude
+        self._all_units = all_units
+        self._sweep_text = sweep_text
+        self._rows: list[_BatchRow] = []
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(SPACING_MAIN)
+
+        # ---- Mode selector --------------------------------------------------
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Mode:"))
+        self._mode_combo = QComboBox()
+        self._mode_combo.addItems([self._MODE_VALUES, self._MODE_ALL_UNITS])
+        _register_info(self._mode_combo, "batch_mode_combo")
+        mode_row.addWidget(self._mode_combo, stretch=1)
+        layout.addLayout(mode_row)
+
+        # ---- From-unit selector (shared by both modes) ----------------------
+        unit_row = QHBoxLayout()
+        unit_row.addWidget(QLabel("From unit:"))
+        self._from_unit_combo = QComboBox()
+        self._from_unit_combo.addItems(all_units)
+        idx = self._from_unit_combo.findText(from_unit)
+        if idx >= 0:
+            self._from_unit_combo.setCurrentIndex(idx)
+        _register_info(self._from_unit_combo, "batch_from_unit_combo")
+        unit_row.addWidget(self._from_unit_combo, stretch=1)
+        layout.addLayout(unit_row)
+
+        # ---- To-unit selector (values-list mode only) -----------------------
+        to_row = QHBoxLayout()
+        self._to_unit_label = QLabel("To unit:")
+        to_row.addWidget(self._to_unit_label)
+        self._to_unit_combo = QComboBox()
+        self._to_unit_combo.addItems(all_units)
+        idx2 = self._to_unit_combo.findText(to_unit)
+        if idx2 >= 0:
+            self._to_unit_combo.setCurrentIndex(idx2)
+        _register_info(self._to_unit_combo, "batch_to_unit_combo")
+        to_row.addWidget(self._to_unit_combo, stretch=1)
+        layout.addLayout(to_row)
+
+        # ---- Value input area (mode-dependent) ------------------------------
+        # Values-list mode: multi-line text area
+        self._values_edit = QTextEdit()
+        self._values_edit.setPlaceholderText(
+            "Enter one numeric value per line, e.g.:\n1\n2.5\n1000"
+        )
+        self._values_edit.setFixedHeight(100)
+        _register_info(self._values_edit, "batch_values_edit")
+        layout.addWidget(self._values_edit)
+
+        # All-units mode: single value entry
+        single_row = QHBoxLayout()
+        self._single_value_label = QLabel("Value:")
+        single_row.addWidget(self._single_value_label)
+        self._single_value_edit = QLineEdit("1")
+        _register_info(self._single_value_edit, "batch_single_value_edit")
+        single_row.addWidget(self._single_value_edit, stretch=1)
+        layout.addLayout(single_row)
+
+        # ---- Run button -----------------------------------------------------
+        self._run_btn = QPushButton("Run batch")
+        _register_info(self._run_btn, "batch_run_btn")
+        layout.addWidget(self._run_btn)
+
+        # ---- Results table --------------------------------------------------
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["Input", "Output", "Error"])
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
+        _register_info(self._table, "batch_results_table")
+        layout.addWidget(self._table, stretch=1)
+
+        # ---- Export buttons -------------------------------------------------
+        export_row = QHBoxLayout()
+        self._copy_btn = QPushButton("Copy table")
+        _register_info(self._copy_btn, "batch_copy_btn")
+        export_row.addWidget(self._copy_btn)
+
+        self._save_btn = QPushButton("Save CSV…")
+        _register_info(self._save_btn, "batch_save_btn")
+        export_row.addWidget(self._save_btn)
+
+        export_row.addStretch()
+        close_btn = QDialogButtonBox(QDialogButtonBox.Close)
+        close_btn.rejected.connect(self.reject)
+        export_row.addWidget(close_btn)
+        layout.addLayout(export_row)
+
+        # ---- Wire signals ---------------------------------------------------
+        self._mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        self._run_btn.clicked.connect(self._on_run)
+        self._copy_btn.clicked.connect(self._on_copy)
+        self._save_btn.clicked.connect(self._on_save)
+
+        # Set initial mode visibility
+        self._on_mode_changed(self._mode_combo.currentText())
+
+    # ------------------------------------------------------------------
+    # Mode switching
+    # ------------------------------------------------------------------
+
+    def _on_mode_changed(self, mode: str) -> None:
+        """Show/hide mode-specific controls based on the selected mode."""
+        is_values = (mode == self._MODE_VALUES)
+        self._values_edit.setVisible(is_values)
+        self._to_unit_label.setVisible(is_values)
+        self._to_unit_combo.setVisible(is_values)
+        self._single_value_label.setVisible(not is_values)
+        self._single_value_edit.setVisible(not is_values)
+        # Reset the table when switching modes
+        self._table.setRowCount(0)
+        self._rows = []
+
+    # ------------------------------------------------------------------
+    # Run batch
+    # ------------------------------------------------------------------
+
+    def _on_run(self) -> None:
+        """Execute the batch conversion and populate the results table."""
+        mode = self._mode_combo.currentText()
+        from_unit = self._from_unit_combo.currentText()
+
+        if mode == self._MODE_VALUES:
+            self._run_values_mode(from_unit)
+        else:
+            self._run_all_units_mode(from_unit)
+
+    def _run_values_mode(self, from_unit: str) -> None:
+        """Run values-list batch: N input values → N results."""
+        to_unit = self._to_unit_combo.currentText()
+        raw_text = self._values_edit.toPlainText()
+        lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+        if not lines:
+            return
+
+        self._rows = _batch_convert_values(
+            _core.convert,
+            self._magnitude,
+            lines,
+            from_unit,
+            to_unit,
+            sweep_text=self._sweep_text,
+        )
+
+        # Populate table: columns = Input | Output | Error
+        self._table.setColumnCount(3)
+        self._table.setHorizontalHeaderLabels(["Input", "Output", "Error"])
+        self._table.setRowCount(len(self._rows))
+        for row_idx, row in enumerate(self._rows):
+            self._table.setItem(row_idx, 0, QTableWidgetItem(row.input_value))
+            self._table.setItem(row_idx, 1, QTableWidgetItem(row.output_text))
+            self._table.setItem(row_idx, 2, QTableWidgetItem(row.error or ""))
+        self._table.resizeColumnsToContents()
+
+    def _run_all_units_mode(self, from_unit: str) -> None:
+        """Run all-units batch: one value → one row per unit."""
+        raw = self._single_value_edit.text().strip()
+        try:
+            value = float(raw)
+        except ValueError:
+            logger.error(
+                "_BatchDialog: invalid single value %r for all-units mode", raw
+            )
+            self._table.setRowCount(0)
+            return
+
+        self._rows = _batch_convert_to_all_units(
+            _core.convert,
+            _core.list_units,
+            self._magnitude,
+            value,
+            from_unit,
+            sweep_text=self._sweep_text,
+        )
+
+        # Populate table: columns = Unit | Output | Error
+        self._table.setColumnCount(3)
+        self._table.setHorizontalHeaderLabels(["Unit", "Output", "Error"])
+        self._table.setRowCount(len(self._rows))
+        for row_idx, row in enumerate(self._rows):
+            self._table.setItem(row_idx, 0, QTableWidgetItem(row.unit or ""))
+            self._table.setItem(row_idx, 1, QTableWidgetItem(row.output_text))
+            self._table.setItem(row_idx, 2, QTableWidgetItem(row.error or ""))
+        self._table.resizeColumnsToContents()
+
+    # ------------------------------------------------------------------
+    # Export helpers
+    # ------------------------------------------------------------------
+
+    def _current_headers(self) -> list[str]:
+        """Return the BatchRow field names matching the current table columns."""
+        mode = self._mode_combo.currentText()
+        if mode == self._MODE_VALUES:
+            return ["input_value", "output_text", "error"]
+        else:
+            return ["unit", "output_text", "error"]
+
+    def _on_copy(self) -> None:
+        """Serialise the results table to CSV and copy to the clipboard."""
+        if not self._rows:
+            return
+        csv_text = _rows_to_csv(self._rows, self._current_headers())
+        QApplication.clipboard().setText(csv_text)
+        logger.debug("_BatchDialog: copied %d rows to clipboard", len(self._rows))
+
+    def _on_save(self) -> None:
+        """Open a file-save dialog and write the results to a CSV file."""
+        if not self._rows:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save batch results",
+            f"batch_{self._magnitude}.csv",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not path:
+            return
+        csv_text = _rows_to_csv(self._rows, self._current_headers())
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                fh.write(csv_text)
+            logger.info("_BatchDialog: saved %d rows to %r", len(self._rows), path)
+        except OSError as exc:
+            logger.error("_BatchDialog: failed to save CSV to %r: %s", path, exc)
+            QMessageBox.warning(
+                self,
+                "Save failed",
+                f"Could not write file:\n{exc}",
+            )
+
+
+# ---------------------------------------------------------------------------
 # Main window
 # ---------------------------------------------------------------------------
 
@@ -1283,6 +1604,7 @@ class MainWindow(QWidget):
         menu.addSeparator()
         copy_action = menu.addAction("Copy result\tCtrl+C")
         search_action = menu.addAction("Find Unit...\tCtrl+F")
+        batch_action = menu.addAction("Batch convert...")
         menu.addSeparator()
         history_action = menu.addAction("History / Favorites...")
         add_unit_action = menu.addAction("Add Custom Unit...")
@@ -1296,6 +1618,8 @@ class MainWindow(QWidget):
             self._copy_result()
         elif action == search_action:
             self._show_search()
+        elif action == batch_action:
+            self._show_batch()
         elif action == history_action:
             self._show_history()
         elif action == add_unit_action:
@@ -1361,6 +1685,43 @@ class MainWindow(QWidget):
                 hit.unit,
                 hit.magnitude,
             )
+
+    def _show_batch(self) -> None:
+        """
+        Open the batch-conversion dialog (SPEC-12).
+
+        Pre-fills magnitude and units from the main window's current
+        selection.  If no magnitude is selected, shows an information
+        message instead of opening an empty dialog.
+        """
+        magnitude = self._cb_magnitude.currentText()
+        if magnitude == "*Select magnitude*":
+            QMessageBox.information(
+                self,
+                "Batch convert",
+                "Please select a magnitude first.",
+            )
+            return
+
+        mag_idx = self._magnitude_names.get(magnitude, -1)
+        if mag_idx < 0:
+            return
+        all_units = list(self._magnitudes[mag_idx].keys())
+
+        from_unit = self._cb_unit1.currentText()
+        to_unit = self._cb_unit2.currentText()
+        sweep_text = self._sweep1.text()
+
+        dlg = _BatchDialog(
+            magnitude=magnitude,
+            from_unit=from_unit,
+            to_unit=to_unit,
+            all_units=all_units,
+            sweep_text=sweep_text,
+            parent=self,
+            colors=self._active_colors,
+        )
+        dlg.exec()
 
     def _show_settings(self) -> None:
         """Open the Settings dialog (TASK 2)."""
