@@ -298,6 +298,25 @@ Negative values, `inf`, and `NaN` are clamped to `0.0` before conversion. This i
 documented behaviour of the core. Note: `0.0` is also the result for a genuine input of
 exactly `0.0` — the two cases are indistinguishable from the output alone.
 
+### Error-surface policy (SPEC-19 / SPEC-R3, recorded 2026-06-28)
+
+The desktop GUI follows one deliberate rule for showing problems to the user:
+
+- **Non-blocking, themed inline surfaces are the default** for transient/runtime errors. A failed
+  conversion shows `error` in the result label (it does not interrupt the user), and the batch
+  dialog reports CSV save/copy outcomes — including write failures — in an inline status label
+  styled from the active theme (SPEC-R2). No popup window is used for these.
+- **Modal dialogs (`QMessageBox`) are reserved for three intentional cases** and are *not* SPEC-19
+  regressions:
+  1. **Fatal startup failure** — if the magnitude database cannot be loaded there is no usable
+     window to host an inline surface, so a modal message is shown and the app then exits.
+  2. **Blocking input validation** — the *Add custom unit* dialog rejects an empty name or a
+     non-numeric factor with a modal warning, because the user must correct the input before the
+     action can complete.
+  3. **Explicit acknowledgement dialogs** — *About* and the "custom unit added" confirmation.
+
+Diagnostics are never printed; everything is routed through the stdlib `logging` framework.
+
 ---
 
 ## Part B: Using the REST API
