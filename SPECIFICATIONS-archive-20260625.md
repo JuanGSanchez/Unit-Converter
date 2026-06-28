@@ -127,6 +127,11 @@ replacement (SPEC-01) leads. Specs are grouped by theme; each theme is ordered b
   toolset).
 - **Scope:** FastMCP server exposing exactly three tools backed by the same core:
   `list_magnitudes()`, `list_units(magnitude)`, `convert(...)`. No write/stateful tools.
+- **SUPERSEDED (2026-06-28) by SPEC-R1:** the "exactly three" / "minimal (3)" tool-count
+  criterion below is no longer in force. The delivered access layer intentionally exposes 16
+  curated tools (compound, currency, history/favorites, custom units) — an accepted capability
+  expansion documented in `docs/agent-access.md` and locked by `_EXPECTED_TOOL_NAMES_16`. The
+  one-shared-core and "no redundant tools" intents still hold.
 - **Acceptance criteria:**
   - The three tools are discoverable and each returns values identical to the core (parity tests).
   - Tool count stays minimal (3) per F4 discipline; no redundant tools.
