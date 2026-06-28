@@ -16,7 +16,8 @@ Features:
   position used by the Up/Down arrow increment; click resets to "...".
 - Arrow-key (Up/Down) and mouse-wheel nudge of the numeric entry value.
 - Hover tooltips (QToolTip) for every widget that carries user-visible info.
-  Tooltips use rich-text <p> wrapping so multi-line text is never clipped.
+  All tooltips are set via :func:`info_registry.register_info` — no inline
+  literals.  One ``QToolTip { ... }`` QSS block in ``theme.py`` styles them.
 - Right-click context menu: Settings, History/Favorites, Add Custom Unit,
   About, and Exit.
 - Ctrl+Q exits the application.
@@ -30,8 +31,8 @@ Features:
 Implementation notes
 --------------------
 - The window is NOT frameless; the OS title-bar is preserved as expected.
-- Hover tooltips use Qt native QToolTip (``setToolTip``) with rich-text
-  ``<p>`` markup so Qt wraps text correctly and never clips multi-line tips.
+- Hover tooltips use Qt native QToolTip via :func:`info_registry.register_info`,
+  which sets tooltip + accessible description + WhatsThis from one registry.
 - Ctrl+Q is the quit shortcut (universally expected in Qt apps).
 - No ``del locals()`` / ``gc.collect()`` / ``del self`` cargo-cult exit — uses
   standard Qt ``QApplication.quit()``.
@@ -89,8 +90,8 @@ from unit_converter.core.history import (
 )
 from unit_converter.gui.history_menu import context_menu_actions as _ctx_actions
 from unit_converter.gui import theme as _theme
-from unit_converter.gui.description import attach_description
 from unit_converter.gui.format_result import format_result as _format_result
+from unit_converter.gui.info_registry import register_info as _register_info
 from unit_converter.gui.theme_persist import (
     is_valid_hex_color,
     load_theme_prefs,
@@ -130,32 +131,6 @@ _WINDOW_WIDTH, _WINDOW_HEIGHT = golden_ratio_size(260)
 
 
 # ---------------------------------------------------------------------------
-# Tooltip helper — ensures full text is visible (TASK 3)
-# ---------------------------------------------------------------------------
-
-def _tip(text: str) -> str:
-    """
-    Wrap a tooltip string in rich-text markup so Qt renders it at a
-    comfortable width and never clips multi-line content.
-
-    Qt switches to rich-text mode when the string starts with ``<``, which
-    also enables its built-in word-wrap for QToolTip.  The ``white-space:
-    pre`` style preserves intentional newlines from the caller while still
-    allowing the tooltip popup to grow as needed.
-    """
-    # Escape any bare ampersands / angle brackets in the raw text so HTML
-    # does not misinterpret them; then re-insert intentional newlines as <br>.
-    safe = (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\n", "<br>")
-    )
-    return f"<p style='white-space:pre;margin:4px'>{safe}</p>"
-
-
-# ---------------------------------------------------------------------------
 # Scrollable order label
 # ---------------------------------------------------------------------------
 
@@ -173,9 +148,7 @@ class _OrderLabel(QLabel):
         self._keys: list[str] = ["1"]  # prefix symbol sequence
         self._vals: list[int] = [0]    # exponent sequence
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(_tip(
-            "Scroll to change order of magnitude.\nClick to reset."
-        ))
+        _register_info(self, "order_label")
         # Stylesheet is applied by the caller via restyle(colors) immediately
         # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
@@ -229,9 +202,7 @@ class _SweepLabel(QLabel):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__("...", parent)
         self.setAlignment(Qt.AlignCenter)
-        self.setToolTip(_tip(
-            "Scroll to change digit position sweep.\nClick to reset."
-        ))
+        _register_info(self, "sweep_label")
         # Stylesheet is applied by the caller via restyle(colors) immediately
         # after construction; no need for a redundant default-theme pass here.
         self.setFixedWidth(36)
@@ -302,9 +273,7 @@ class _NumEntry(QLineEdit):
         # Stylesheet is applied by the caller via restyle(colors) immediately
         # after construction; no need for a redundant default-theme pass here.
         self.setEnabled(False)
-        self.setToolTip(_tip(
-            "Write or press Enter\nto run the conversion."
-        ))
+        _register_info(self, "num_entry")
 
     def restyle(self, colors: dict[str, str]) -> None:
         """Update stylesheet from the provided colour mapping."""
@@ -387,7 +356,7 @@ class _HistoryDialog(QDialog):
         self.setWindowTitle("Conversion History")
         _w, _h = dialog_default_size("history")
         center_dialog_on_parent(self, _w, _h)
-        self.setToolTip(_tip("Recent conversions and saved favorites."))
+        _register_info(self, "hist_dialog")
 
         # Apply dialog theme using the live override-aware color mapping.
         # Falls back to the built-in Light palette if no colors are supplied.
@@ -401,10 +370,7 @@ class _HistoryDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self._list = QListWidget()
-        self._list.setToolTip(_tip(
-            "Recent conversions — double-click to re-run.\n"
-            "Right-click for more options."
-        ))
+        _register_info(self._list, "hist_list")
         # Enable the custom context menu signal
         self._list.setContextMenuPolicy(Qt.CustomContextMenu)
         self._list.customContextMenuRequested.connect(self._on_context_menu)
@@ -419,11 +385,10 @@ class _HistoryDialog(QDialog):
         buttons.addButton(QDialogButtonBox.Close)
         layout.addWidget(buttons)
 
-        self._btn_rerun.setToolTip(_tip("Re-populate the converter with this entry."))
-        self._btn_fav.setToolTip(_tip("Mark this entry as a favorite."))
-        self._btn_toggle.setToolTip(_tip(
-            "Switch between full history and favorites-only view."
-        ))
+        _register_info(self._btn_rerun, "hist_btn_rerun")
+        _register_info(self._btn_fav, "hist_btn_fav")
+        # Initial toggle button tooltip — full→fav direction (not yet in fav mode)
+        _register_info(self._btn_toggle, "hist_toggle_to_fav")
 
         self._btn_rerun.clicked.connect(self._on_rerun)
         self._btn_fav.clicked.connect(self._on_favorite)
@@ -482,18 +447,19 @@ class _HistoryDialog(QDialog):
             self._refresh()
 
     def _on_toggle_view(self) -> None:
-        """Toggle between full-history and favorites-only view."""
+        """Toggle between full-history and favorites-only view.
+
+        Uses registry keys ``hist_toggle_to_full`` and ``hist_toggle_to_fav``
+        so the dynamic tooltip change is tested via :func:`register_info`
+        (SPEC-01 state-dependent tooltip requirement).
+        """
         self._favorites_mode = not self._favorites_mode
         if self._favorites_mode:
             self._btn_toggle.setText("Show All")
-            self._btn_toggle.setToolTip(_tip(
-                "Switch back to the full history view."
-            ))
+            _register_info(self._btn_toggle, "hist_toggle_to_full")
         else:
             self._btn_toggle.setText("Show Favorites")
-            self._btn_toggle.setToolTip(_tip(
-                "Switch to favorites-only view."
-            ))
+            _register_info(self._btn_toggle, "hist_toggle_to_fav")
         self._refresh()
 
     # ------------------------------------------------------------------
@@ -604,7 +570,7 @@ class _AddUnitDialog(QDialog):
         self.setWindowTitle("Add Custom Unit")
         _w, _h = dialog_default_size("add_unit")
         center_dialog_on_parent(self, _w, _h)
-        self.setToolTip(_tip("Add a custom unit to an existing magnitude."))
+        _register_info(self, "add_unit_dialog")
 
         # Apply dialog theme using the live override-aware color mapping.
         # Falls back to the built-in Light palette if no colors are supplied.
@@ -616,20 +582,17 @@ class _AddUnitDialog(QDialog):
 
         self._cb_magnitude = QComboBox()
         self._cb_magnitude.addItems(magnitude_names)
-        self._cb_magnitude.setToolTip(_tip("The magnitude to extend."))
+        _register_info(self._cb_magnitude, "add_unit_magnitude_combo")
         form.addRow("Magnitude:", self._cb_magnitude)
 
         self._ed_name = QLineEdit()
         self._ed_name.setPlaceholderText("e.g. stone (st)")
-        self._ed_name.setToolTip(_tip("Name for the new unit."))
+        _register_info(self._ed_name, "add_unit_name_edit")
         form.addRow("Unit name:", self._ed_name)
 
         self._ed_factor = QLineEdit()
         self._ed_factor.setPlaceholderText("e.g. 6350.29")
-        self._ed_factor.setToolTip(_tip(
-            "Conversion factor relative to the magnitude's base unit.\n"
-            "Must be a positive, non-zero finite number."
-        ))
+        _register_info(self._ed_factor, "add_unit_factor_edit")
         form.addRow("Factor:", self._ed_factor)
 
         layout.addLayout(form)
@@ -704,7 +667,7 @@ class _SettingsDialog(QDialog):
         self.setWindowTitle("Settings — Theme & Colors")
         _w, _h = dialog_default_size("settings")
         center_dialog_on_parent(self, _w, _h)
-        self.setToolTip(_tip("Configure the application theme and widget colours."))
+        _register_info(self, "settings_dialog")
 
         # Working copy of colours that the user is editing
         self._working: dict[str, str] = dict(current_colors)
@@ -721,13 +684,10 @@ class _SettingsDialog(QDialog):
         idx = self._cb_theme.findText(current_theme_name)
         if idx >= 0:
             self._cb_theme.setCurrentIndex(idx)
-        self._cb_theme.setToolTip(_tip(
-            "Select a built-in theme.\n"
-            "Colours below will be reset to the theme's defaults."
-        ))
+        _register_info(self._cb_theme, "settings_theme_combo")
         theme_row.addWidget(self._cb_theme, stretch=1)
         load_btn = QPushButton("Load theme")
-        load_btn.setToolTip(_tip("Reset all colours to the selected built-in theme."))
+        _register_info(load_btn, "settings_load_btn")
         load_btn.clicked.connect(self._on_load_theme)
         theme_row.addWidget(load_btn)
         layout.addWidget(theme_group)
@@ -750,7 +710,7 @@ class _SettingsDialog(QDialog):
 
             swatch = QPushButton()
             swatch.setFixedSize(28, 22)
-            swatch.setToolTip(_tip(f"Click to open colour picker for:\n{label}"))
+            _register_info(swatch, "settings_swatch_btn", extra=f"\n{label}")
             self._update_swatch(swatch, self._working.get(key, "#808080"))
             swatch.clicked.connect(lambda checked=False, k=key: self._on_pick_color(k))
             self._swatch_btns[key] = swatch
@@ -760,9 +720,7 @@ class _SettingsDialog(QDialog):
             hex_ed.setFixedWidth(80)
             hex_ed.setMaxLength(7)
             hex_ed.setPlaceholderText("#RRGGBB")
-            hex_ed.setToolTip(_tip(
-                f"Type a hex colour for:\n{label}\nFormat: #RRGGBB"
-            ))
+            _register_info(hex_ed, "settings_hex_edit", extra=f"{label}")
             hex_ed.textEdited.connect(lambda text, k=key: self._on_hex_edited(k, text))
             self._hex_edits[key] = hex_ed
             row_layout.addWidget(hex_ed)
@@ -777,7 +735,7 @@ class _SettingsDialog(QDialog):
         # -- Buttons ----------------------------------------------------------
         button_row = QHBoxLayout()
         apply_btn = QPushButton("Apply")
-        apply_btn.setToolTip(_tip("Apply the current colours to the window immediately."))
+        _register_info(apply_btn, "settings_apply_btn")
         apply_btn.clicked.connect(self._on_apply)
         button_row.addWidget(apply_btn)
 
@@ -987,9 +945,6 @@ class MainWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        # Holds DescriptionLabel objects to prevent GC from uninstalling filters.
-        self._descriptions: list = []
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(MARGIN_H, MARGIN_V, MARGIN_H, MARGIN_V)
         layout.setSpacing(SPACING_MAIN)
@@ -1010,9 +965,7 @@ class MainWindow(QWidget):
         self._cb_magnitude.setStyleSheet(
             _theme.build_combo_stylesheet(self._active_colors)
         )
-        self._cb_magnitude.setToolTip(_tip(
-            "List of magnitudes added to the application."
-        ))
+        _register_info(self._cb_magnitude, "magnitude_combo")
         layout.addWidget(self._cb_magnitude)
 
         # ---- From section ----
@@ -1063,7 +1016,7 @@ class MainWindow(QWidget):
             _theme.build_header_label_stylesheet(self._active_colors)
         )
         val_lab.setFixedWidth(90)
-        val_lab.setToolTip(_tip("Actual total value in scientific notation."))
+        _register_info(val_lab, "val_label")
 
         if label_text.startswith("From"):
             self._lab_val1 = val_lab
@@ -1097,16 +1050,7 @@ class MainWindow(QWidget):
             self._order2 = order_lab
             self._cb_unit2 = unit_cb
 
-        # Instant description overlay for the unit combo (zero delay, auto-sized).
-        # Stored in self._descriptions to prevent GC from removing the event filter.
-        self._descriptions.append(attach_description(
-            unit_cb,
-            "Select the unit to convert from or to.\n"
-            "Only units for the chosen magnitude are listed.",
-            show_delay_ms=0,
-            max_wrap_width=220,
-            colors=self._active_colors,
-        ))
+        _register_info(unit_cb, "unit_combo")
 
         row.addWidget(order_lab)
         row.addWidget(unit_cb, stretch=1)
@@ -1135,17 +1079,8 @@ class MainWindow(QWidget):
             self._sweep2 = sweep
             self._entry2 = entry
 
-        # Instant description overlay for the sweep label (zero delay, auto-sized).
-        # Stored in self._descriptions to prevent GC from removing the event filter.
-        self._descriptions.append(attach_description(
-            sweep,
-            "Scroll to change the decimal digit position\n"
-            "used by the Up/Down arrow increment.\n"
-            "Click to reset to auto.",
-            show_delay_ms=0,
-            max_wrap_width=220,
-            colors=self._active_colors,
-        ))
+        # sweep_label tooltip is set in _SweepLabel.__init__ via register_info.
+        # No additional call needed here.
 
         row.addWidget(entry, stretch=1)
         row.addWidget(sweep)
@@ -1161,6 +1096,22 @@ class MainWindow(QWidget):
         self._cb_unit2.currentTextChanged.connect(lambda _: self._unit_converter(1))
         self._entry1.textEdited.connect(lambda _: self._unit_converter(1))
         self._entry2.textEdited.connect(lambda _: self._unit_converter(2))
+        self._setup_tab_order()
+
+    def _setup_tab_order(self) -> None:
+        """
+        Set the logical tab order for the main conversion flow (SPEC-22).
+
+        Order: magnitude → unit1 → order1 → entry1 → entry2 → unit2 → order2.
+        This ensures keyboard-only users can navigate the conversion inputs in
+        a top-to-bottom, left-to-right sequence without extra Tab presses.
+        """
+        QWidget.setTabOrder(self._cb_magnitude, self._cb_unit1)
+        QWidget.setTabOrder(self._cb_unit1, self._order1)
+        QWidget.setTabOrder(self._order1, self._entry1)
+        QWidget.setTabOrder(self._entry1, self._entry2)
+        QWidget.setTabOrder(self._entry2, self._cb_unit2)
+        QWidget.setTabOrder(self._cb_unit2, self._order2)
 
     # ------------------------------------------------------------------
     # Keyboard shortcuts

@@ -156,9 +156,47 @@ DEFAULT_THEME_NAME = LIGHT_THEME.name
 # Stylesheet builders
 # ---------------------------------------------------------------------------
 
+def build_tooltip_stylesheet(colors: dict[str, str]) -> str:
+    """
+    Return the single ``QToolTip { ... }`` QSS block driven by theme colours.
+
+    This is the ONE theming point for all tooltips in the application (SPEC-01).
+    It is appended by both :func:`build_main_window_stylesheet` and
+    :func:`build_dialog_stylesheet` so every tooltip — whether hovering over a
+    main-window widget or a dialog widget — is themed from the active palette
+    and restyles automatically when the user switches themes.
+
+    No per-widget ``setStyleSheet`` override may set tooltip colours; all
+    tooltip styling derives solely from the ``QToolTip`` selector below.
+
+    Parameters
+    ----------
+    colors:
+        A theme colour mapping.  Uses keys ``bg_title`` (tooltip background),
+        ``fg_main`` (tooltip text), and ``border_main`` (tooltip border).
+
+    Returns
+    -------
+    str
+        A ``QToolTip { ... }`` QSS rule string.
+    """
+    return (
+        f"QToolTip {{"
+        f" background-color: {colors['bg_title']};"
+        f" color: {colors['fg_main']};"
+        f" border: 1px solid {colors['border_main']};"
+        f" padding: 2px 4px;"
+        f" }}"
+    )
+
+
 def build_main_window_stylesheet(colors: dict[str, str]) -> str:
     """
     Return the top-level QSS stylesheet for the main window background.
+
+    Includes the single ``QToolTip { ... }`` block (see
+    :func:`build_tooltip_stylesheet`) so all main-window tooltips are themed
+    from the active palette.
 
     Parameters
     ----------
@@ -170,9 +208,12 @@ def build_main_window_stylesheet(colors: dict[str, str]) -> str:
     Returns
     -------
     str
-        A ``QWidget { background-color: ... }`` stylesheet string.
+        A QSS stylesheet string covering the window background and QToolTip.
     """
-    return f"background-color: {colors['bg_main']};"
+    return (
+        f"background-color: {colors['bg_main']}; "
+        + build_tooltip_stylesheet(colors)
+    )
 
 
 def build_magnitude_label_stylesheet(colors: dict[str, str]) -> str:
@@ -251,10 +292,17 @@ def build_entry_stylesheet(colors: dict[str, str]) -> str:
 
 
 def build_dialog_stylesheet(colors: dict[str, str]) -> str:
-    """Return the QSS for dialog windows (History, Settings, etc.)."""
+    """
+    Return the QSS for dialog windows (History, Settings, etc.).
+
+    Includes the single ``QToolTip { ... }`` block (see
+    :func:`build_tooltip_stylesheet`) so dialog tooltips are themed from the
+    active palette and restyle when the user switches themes.
+    """
     return (
         f"background-color: {colors['bg_dialog']}; "
-        f"color: {colors['fg_main']};"
+        f"color: {colors['fg_main']}; "
+        + build_tooltip_stylesheet(colors)
     )
 
 
@@ -309,8 +357,5 @@ def apply_colors_to_main_window(win: "MainWindow", colors: dict[str, str]) -> No
     for cb in (win._cb_unit1, win._cb_unit2):
         cb.setStyleSheet(build_unit_combo_stylesheet(colors))
 
-    # Instant description overlays — restyle with the new palette.
-    # The _descriptions list is created by _build_ui; guard against early
-    # calls (e.g. _setup_window) before _build_ui has run.
-    for desc in getattr(win, "_descriptions", []):
-        desc.restyle(colors)
+    # Tooltip styling is applied globally via the QSS QToolTip block embedded
+    # in build_main_window_stylesheet — no per-widget restyle needed here.

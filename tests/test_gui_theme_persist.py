@@ -506,31 +506,26 @@ class TestBuildDialogStylesheet:
 
 
 # =========================================================================
-# Hover-description invariant lock  (Qt-free: source-text scan only)
+# Widget-info invariant lock  (Qt-free: source-text scan only)  [SPEC-01]
 #
-# Guards TWO complementary invariants:
+# Guards the SPEC-01 centralized-info invariants:
 #
-# 1. setToolTip floor — every interactive control that had a native Qt tooltip
-#    still has one (count must not regress below the established floor).
+# 1. No inline setToolTip( call remains in main_window.py — all tooltips must
+#    go through register_info (info_registry module).
 #
-# 2. DescriptionLabel / attach_description coverage — the two widget pairs that
-#    must show INSTANT descriptions (unit combos, sweep labels) are wired via
-#    attach_description in main_window.py, and the description module exists
-#    with the required public API symbols.
+# 2. register_info is imported and used; description.py has been deleted.
 #
-# Both locks are pure source-text scans — no Qt/display required.
+# 3. The info_registry module and its register_info helper exist.
+#
+# 4. The single QToolTip QSS block is present in theme.py.
+#
+# All checks are pure source-text scans — no Qt/display required.
 # =========================================================================
 
-# Floor established after the Light/Dark theming + Settings pass.
-# The DescriptionLabel additions are ADDITIVE — they do not replace setToolTip
-# calls, so this count must stay at or above 19.
-_MIN_SETTOOLTIP_CALLS = 19
-
-# Minimum number of attach_description call-sites in main_window.py.
-# _make_unit_row and _make_entry_row each contain one call-site, and each is
-# invoked for slot=1 and slot=2 at runtime — so 2 source call-sites produce
-# 4 DescriptionLabel objects.  The source scan sees 2.
-_MIN_ATTACH_DESCRIPTION_CALLS = 2
+# Minimum number of register_info call-sites expected in main_window.py.
+# 23 original setToolTip + 2 attach_description sites collapsed into
+# register_info calls (some merge to one key per widget).
+_MIN_REGISTER_INFO_CALLS = 20
 
 
 def _main_window_source() -> str:
@@ -541,97 +536,139 @@ def _main_window_source() -> str:
     return src.read_text(encoding="utf-8")
 
 
-def _description_module_source() -> str:
+def _info_registry_source() -> str:
     src = (
         Path(__file__).resolve().parent.parent
-        / "unit_converter" / "gui" / "description.py"
+        / "unit_converter" / "gui" / "info_registry.py"
+    )
+    return src.read_text(encoding="utf-8")
+
+
+def _theme_source() -> str:
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "unit_converter" / "gui" / "theme.py"
     )
     return src.read_text(encoding="utf-8")
 
 
 class TestTooltipInvariant:
     """
-    The GUI must keep its hover tooltips AND its instant descriptions.
+    SPEC-01 widget-info invariants — pure source-text scans, no Qt required.
 
-    Invariant 1 (setToolTip floor): every interactive control keeps its Qt
-    native tooltip — the count of setToolTip( calls must not regress.
+    Invariant 1 (no inline tooltips): main_window.py must NOT call
+    setToolTip( directly; all info text goes through register_info.
 
-    Invariant 2 (DescriptionLabel coverage): the two specified widget pairs
-    (unit combos + sweep labels) have instant descriptions via
-    attach_description.  The description.py module must export the required
-    public API symbols.
+    Invariant 2 (register_info coverage floor): the number of register_info(
+    call-sites must not regress below the established floor.
 
-    All checks are pure source-text scans — no Qt/display required.
+    Invariant 3 (registry present): info_registry.py must exist and export
+    register_info and INFO_TEXTS.
+
+    Invariant 4 (bespoke overlay deleted): description.py must not exist.
+
+    Invariant 5 (single QSS theming): theme.py must contain exactly one
+    QToolTip { ... } styling block.
     """
 
-    # -- Invariant 1: setToolTip count floor --
+    # -- Invariant 1: no inline setToolTip in main_window.py --
 
-    def test_setooltip_count_does_not_regress(self) -> None:
+    def test_no_inline_settoolTip_in_main_window(self) -> None:
         count = _main_window_source().count("setToolTip(")
-        assert count >= _MIN_SETTOOLTIP_CALLS, (
-            f"setToolTip( count regressed: found {count}, "
-            f"expected >= {_MIN_SETTOOLTIP_CALLS}. A hover tooltip was dropped."
+        assert count == 0, (
+            f"Found {count} inline setToolTip( call(s) in main_window.py. "
+            "All tooltips must go through register_info (SPEC-01)."
         )
 
-    # -- Invariant 2a: attach_description wired in main_window.py --
-
-    def test_attach_description_imported_in_main_window(self) -> None:
+    def test_no_tip_helper_in_main_window(self) -> None:
         src = _main_window_source()
-        assert "attach_description" in src, (
-            "attach_description is not imported/used in main_window.py. "
-            "Instant description overlays are not wired."
+        assert "def _tip(" not in src, (
+            "_tip() rich-text helper still present in main_window.py — "
+            "it must be deleted (SPEC-01 mandates plain-text registry)."
         )
 
-    def test_attach_description_call_count_not_below_floor(self) -> None:
-        count = _main_window_source().count("attach_description(")
-        assert count >= _MIN_ATTACH_DESCRIPTION_CALLS, (
-            f"attach_description( call count regressed: found {count}, "
-            f"expected >= {_MIN_ATTACH_DESCRIPTION_CALLS}. "
-            "An instant description for a unit combo or sweep label was dropped."
+    # -- Invariant 2: register_info coverage floor --
+
+    def test_register_info_imported_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "register_info" in src, (
+            "register_info is not imported/used in main_window.py. "
+            "Tooltip registration is broken (SPEC-01)."
         )
 
-    # -- Invariant 2b: description.py API symbols --
-
-    def test_description_module_exports_attach_description(self) -> None:
-        src = _description_module_source()
-        assert "def attach_description" in src, (
-            "attach_description function not found in description.py."
+    def test_register_info_call_count_not_below_floor(self) -> None:
+        count = _main_window_source().count("_register_info(")
+        assert count >= _MIN_REGISTER_INFO_CALLS, (
+            f"_register_info( call count too low: found {count}, "
+            f"expected >= {_MIN_REGISTER_INFO_CALLS}. "
+            "A widget lost its info registration (SPEC-01)."
         )
 
-    def test_description_module_exports_build_stylesheet(self) -> None:
-        src = _description_module_source()
-        assert "def build_description_stylesheet" in src, (
-            "build_description_stylesheet not found in description.py."
+    # -- Invariant 3: info_registry.py API surface --
+
+    def test_info_registry_module_exists(self) -> None:
+        src = _info_registry_source()
+        assert len(src) > 100, "info_registry.py is missing or nearly empty"
+
+    def test_info_registry_exports_register_info(self) -> None:
+        src = _info_registry_source()
+        assert "def register_info(" in src, (
+            "register_info function not found in info_registry.py."
         )
 
-    def test_description_module_has_show_delay_param(self) -> None:
-        src = _description_module_source()
-        assert "show_delay_ms" in src, (
-            "show_delay_ms parameter not found in description.py — "
-            "delay configurability requirement is broken."
+    def test_info_registry_exports_info_texts(self) -> None:
+        src = _info_registry_source()
+        assert "INFO_TEXTS" in src, (
+            "INFO_TEXTS dict not found in info_registry.py."
         )
 
-    def test_description_module_has_max_wrap_width_param(self) -> None:
-        src = _description_module_source()
-        assert "max_wrap_width" in src, (
-            "max_wrap_width parameter not found in description.py — "
-            "auto-size/wrap requirement is broken."
+    def test_info_registry_exports_info_keys(self) -> None:
+        src = _info_registry_source()
+        assert "INFO_KEYS" in src, (
+            "INFO_KEYS frozenset not found in info_registry.py."
         )
 
-    def test_description_module_has_restyle_method(self) -> None:
-        src = _description_module_source()
-        assert "def restyle" in src, (
-            "restyle method not found in description.py — "
-            "theme-change wiring is broken."
+    # -- Invariant 4: bespoke overlay deleted --
+
+    def test_description_py_does_not_exist(self) -> None:
+        desc_path = (
+            Path(__file__).resolve().parent.parent
+            / "unit_converter" / "gui" / "description.py"
+        )
+        assert not desc_path.exists(), (
+            "description.py still exists — it must be deleted (SPEC-01: "
+            "the only info surface is QToolTip, not a bespoke overlay)."
         )
 
-    # -- Qt-freedom guard --
+    def test_attach_description_not_in_main_window(self) -> None:
+        src = _main_window_source()
+        assert "attach_description" not in src, (
+            "attach_description still referenced in main_window.py — "
+            "the bespoke overlay is fully replaced by register_info (SPEC-01)."
+        )
+
+    # -- Invariant 5: single QSS theming in theme.py --
+
+    def test_theme_py_has_qtoolTip_qss_block(self) -> None:
+        src = _theme_source()
+        assert "QToolTip" in src, (
+            "QToolTip QSS block not found in theme.py — "
+            "tooltip styling must derive from the single theme QSS block (SPEC-01)."
+        )
+
+    def test_theme_py_has_build_tooltip_stylesheet(self) -> None:
+        src = _theme_source()
+        assert "def build_tooltip_stylesheet(" in src, (
+            "build_tooltip_stylesheet not found in theme.py."
+        )
+
+    # -- Qt-freedom guard (unchanged) --
 
     def test_no_pyside6_imported_by_this_scan(self) -> None:
         # theme_persist.py and theme.py must not contain PySide6 import
         # statements.  Source-text scan is order-independent; checking
         # sys.modules is not safe when other test modules in the same
-        # pytest session legitimately import PySide6 (e.g. test_description.py).
+        # pytest session legitimately import PySide6.
         for mod_rel in (
             ("unit_converter", "gui", "theme_persist.py"),
             ("unit_converter", "gui", "theme.py"),
